@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Portfolio Ledger</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Portfolio Ledger</h1>
+    <div id="summary" class="summary"></div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <button id="addRowBtn">+ Add policy</button>
+      <button id="importBtn">Import from Excel</button>
+    </div>
+    <table id="policyTable">
+      <thead>
+        <tr>
+          <th>Policy No</th>
+          <th>Instrument</th>
+          <th>Institution</th>
+          <th>Holder</th>
+          <th>Nominee</th>
+          <th>Received Amount</th>
+          <th>ROI %</th>
+          <th>Maturity Date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="policyTableBody"></tbody>
+    </table>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

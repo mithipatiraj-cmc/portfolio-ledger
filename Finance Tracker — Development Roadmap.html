@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Finance Tracker — Development Roadmap</title>
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --card: #ffffff;
+    --text: #1c1b1a;
+    --text-muted: #6b6560;
+    --border: #e6e2db;
+    --accent: #2f6f4e;
+    --accent-soft: #e6f2ea;
+    --phase1: #2f6f4e;
+    --phase2: #b5732a;
+    --phase3: #3e5c9a;
+    --phase4: #8a4a8f;
+    --phase5: #6b6560;
+    --done-bg: #eef6f0;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181a;
+      --card: #1f2123;
+      --text: #ece9e4;
+      --text-muted: #9a958d;
+      --border: #33352f;
+      --accent: #6fce9c;
+      --accent-soft: #1e3226;
+      --done-bg: #1c2c22;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181a;
+    --card: #1f2123;
+    --text: #ece9e4;
+    --text-muted: #9a958d;
+    --border: #33352f;
+    --accent: #6fce9c;
+    --accent-soft: #1e3226;
+    --done-bg: #1c2c22;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  header h1 {
+    font-size: 1.6rem;
+    margin: 0 0 6px;
+  }
+  header p {
+    color: var(--text-muted);
+    margin: 0 0 18px;
+    font-size: 0.95rem;
+  }
+  .progress-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--border);
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+  .progress-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+  }
+  .stack-card {
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 30px;
+    font-size: 0.92rem;
+  }
+  .stack-card strong { display: block; margin-bottom: 4px; }
+  .phase {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .phase-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .phase-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .phase-title {
+    font-weight: 600;
+    font-size: 1.02rem;
+    flex: 1;
+  }
+  .phase-sub {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .phase-count {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .chevron {
+    transition: transform 0.2s ease;
+    color: var(--text-muted);
+  }
+  .phase.collapsed .chevron { transform: rotate(-90deg); }
+  .phase-body {
+    padding: 0 18px 16px;
+  }
+  .phase.collapsed .phase-body { display: none; }
+  .task {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+    border-top: 1px solid var(--border);
+  }
+  .task:first-child { border-top: none; }
+  .task input[type="checkbox"] {
+    margin-top: 3px;
+    width: 17px;
+    height: 17px;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+  }
+  .task label {
+    font-size: 0.94rem;
+    cursor: pointer;
+  }
+  .task.done label {
+    color: var(--text-muted);
+    text-decoration: line-through;
+  }
+  footer {
+    margin-top: 34px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  .reset-btn {
+    margin-top: 14px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+  .reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Finance Tracker — Development Roadmap</h1>
+    <p>A local, offline, browser-based app to track investment accounts across institutions — expiry, nominee, amount, returns, and payment frequency. Check off tasks as you go; your progress is saved in this browser.</p>
+  </header>
+
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="progress-label" id="progressLabel">0 of 0 tasks complete</div>
+
+  <div class="stack-card">
+    <strong>Recommended stack</strong>
+    Electron desktop app. UI is plain HTML/JS in the renderer process; the <b>main process</b> owns a real SQLite database via <code>node:sqlite</code> (built into Node.js, no native rebuild step) stored as a file in the OS's standard per-app data folder. This replaces the earlier browser-based WASM/OPFS plan — a desktop app gives real filesystem access, so the workaround is no longer needed. The renderer never touches SQLite directly; it calls the main process over IPC. A one-click <b>backup export</b> (the SQLite file itself) lets you move data between machines. LLM API calls for the recommendation engine also run in the main process, keeping the API key out of the renderer entirely.
+  </div>
+
+  <div id="phases"></div>
+
+  <footer>
+    Roadmap generated for planning purposes — reorder or trim tasks as priorities shift. Progress is stored only in this browser tab's storage.
+    <br>
+    <button class="reset-btn" id="resetBtn">Reset all progress</button>
+  </footer>
+</div>
+
+<script>
+const PHASES = [
+  {
+    id: "p1",
+    title: "Phase 1 — Core data & CRUD (MVP)",
+    sub: "A working app you can actually enter accounts into",
+    color: "var(--phase1)",
+    tasks: [
+      "Define the normalized schema: policies, institutions, people, destinations (see spec)",
+      "Scaffold the Electron app (main process, preload script, renderer) and initialize node:sqlite against the schema, storing the .sqlite file in the app's userData folder",
+      "Build the Excel import flow: upload → auto-map columns → preview/validate → duplicate handling → commit",
+      "Build the spreadsheet-style inline-editable table as the main list view",
+      "Implement Add row / Edit cell / Delete row",
+      "Basic sort by expiry date (soonest first)"
+    ]
+  },
+  {
+    id: "p2",
+    title: "Phase 2 — Visibility & alerts",
+    sub: "Make it easy to see what needs attention",
+    color: "var(--phase2)",
+    tasks: [
+      "Dashboard summary: total amount invested, count of accounts, weighted average return",
+      "Color-code / badge accounts nearing expiry (e.g. amber under 60 days, red under 30)",
+      "Search and filter by institution, holder name, or nominee",
+      "Sort toggle by amount, return rate, or holder"
+    ]
+  },
+  {
+    id: "p3",
+    title: "Phase 3 — Financial insights",
+    sub: "Turn raw data into decisions",
+    color: "var(--phase3)",
+    tasks: [
+      "Maturity value calculator per account (principal + return over term)",
+      "Portfolio allocation chart (by institution, by holder)",
+      "Payment-frequency calendar/reminder view (e.g. upcoming interest payouts)",
+      "Simple year-over-year return comparison, if historical data is entered"
+    ]
+  },
+  {
+    id: "p4",
+    title: "Phase 4 — Data management & polish",
+    sub: "Protect the data and make it pleasant to use daily",
+    color: "var(--phase4)",
+    tasks: [
+      "Backup export (copy or export the SQLite database file) and restore-from-file flow",
+      "Package the app for distribution (Electron Forge or electron-builder) producing an installer for your OS",
+      "Printable / PDF summary report of all holdings",
+      "Responsive layout for tablet/phone use on your local network",
+      "Light/dark theme support",
+      "Optional local PIN/passcode screen before showing data"
+    ]
+  },
+  {
+    id: "p5",
+    title: "Phase 5 — Stretch ideas",
+    sub: "Nice-to-haves, only if the core still feels light",
+    color: "var(--phase5)",
+    tasks: [
+      "Multi-currency support if accounts span countries",
+      "Attach scanned certificate/document per account (stored as a blob, referenced from the policies table)",
+      "Notification/email reminder shortly before an account's expiry (would require a small local script or OS-level scheduler, since the app itself is offline)"
+    ]
+  },
+  {
+    id: "p6",
+    title: "Phase 6 — AI-powered features (optional layer)",
+    sub: "Explicit opt-in add-on — not part of the offline core",
+    color: "#a13d3d",
+    tasks: [
+      "Build a single getPortfolioSummary() function in the data layer (running a SQL query with joins across policies/institutions/destinations) that any consumer (charts or AI prompts) can call, so AI logic never queries the database directly",
+      "Make the LLM API call from the Electron main process (not the renderer), keeping the API key out of devtools entirely",
+      "Add an explicit 'Get AI suggestions' action — recommendations run only on request, never automatically, since portfolio data leaves the machine when called",
+      "Scope the recommendation engine's first version narrowly: e.g. flag expiring/underperforming accounts and suggest diversification — avoid vague 'general advice' prompts",
+      "Design the prompt to send only the summarized data needed (totals, allocations, expiry windows) rather than raw account records with names",
+      "Add a visible indicator whenever a network call to the AI is about to happen, so it's never silent"
+    ]
+  }
+];
+
+const STORAGE_KEY = "finance-tracker-roadmap-progress";
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveState(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error("Could not save progress", e);
+  }
+}
+
+let state = loadState();
+
+function render() {
+  const container = document.getElementById("phases");
+  container.innerHTML = "";
+  let totalTasks = 0;
+  let doneTasks = 0;
+
+  PHASES.forEach(phase => {
+    const phaseDone = phase.tasks.filter((_, i) => state[phase.id + "-" + i]).length;
+    totalTasks += phase.tasks.length;
+    doneTasks += phaseDone;
+
+    const phaseEl = document.createElement("div");
+    phaseEl.className = "phase";
+    phaseEl.id = phase.id;
+
+    const head = document.createElement("div");
+    head.className = "phase-head";
+    head.innerHTML = `
+      <span class="phase-dot" style="background:${phase.color}"></span>
+      <span class="phase-title">${phase.title}<br><span class="phase-sub">${phase.sub}</span></span>
+      <span class="phase-count">${phaseDone}/${phase.tasks.length}</span>
+      <span class="chevron">▾</span>
+    `;
+    head.addEventListener("click", () => {
+      phaseEl.classList.toggle("collapsed");
+    });
+
+    const body = document.createElement("div");
+    body.className = "phase-body";
+
+    phase.tasks.forEach((task, i) => {
+      const key = phase.id + "-" + i;
+      const isDone = !!state[key];
+      const taskEl = document.createElement("div");
+      taskEl.className = "task" + (isDone ? " done" : "");
+      const cbId = "cb-" + key;
+      taskEl.innerHTML = `
+        <input type="checkbox" id="${cbId}" ${isDone ? "checked" : ""}>
+        <label for="${cbId}">${task}</label>
+      `;
+      const cb = taskEl.querySelector("input");
+      cb.addEventListener("change", () => {
+        state[key] = cb.checked;
+        saveState(state);
+        render();
+      });
+      body.appendChild(taskEl);
+    });
+
+    phaseEl.appendChild(head);
+    phaseEl.appendChild(body);
+    container.appendChild(phaseEl);
+  });
+
+  const pct = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
+  document.getElementById("progressFill").style.width = pct + "%";
+  document.getElementById("progressLabel").textContent = `${doneTasks} of ${totalTasks} tasks complete (${pct}%)`;
+}
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("Clear all checked progress?")) {
+    state = {};
+    saveState(state);
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
