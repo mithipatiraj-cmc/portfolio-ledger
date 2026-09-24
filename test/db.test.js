@@ -33,7 +33,7 @@ test('addPolicy resolves lookups and round-trips through listPolicies', () => {
     startDate: '2024-01-01',
     maturityDate: '2027-01-01',
     termTotal: '3 years',
-    receivedAmount: 100000,
+    amountInvested: 100000,
     roi: 6.5,
     compoundingPeriodsPerYear: 4,
     maturityAmount: 121000,
@@ -62,12 +62,12 @@ test('repeated institution/person/destination names are deduplicated, not re-ins
   addPolicy(db, {
     policyNumber: 'FD-001', institution: 'HDFC', branch: 'Koramangala',
     holder: 'Raviraj', nominee: 'Someone', destinationBank: 'ICICI', destinationAccount: '1234567890',
-    receivedAmount: 100000, roi: 6.5, maturityDate: '2027-01-01'
+    amountInvested: 100000, roi: 6.5, maturityDate: '2027-01-01'
   });
   addPolicy(db, {
     policyNumber: 'FD-002', institution: 'HDFC', branch: 'Koramangala',
     holder: 'Raviraj', nominee: 'Someone Else', destinationBank: 'ICICI', destinationAccount: '1234567890',
-    receivedAmount: 50000, roi: 7.0, maturityDate: '2026-06-01'
+    amountInvested: 50000, roi: 7.0, maturityDate: '2026-06-01'
   });
 
   const institutionCount = db.prepare('SELECT COUNT(*) AS c FROM institutions').get().c;
@@ -83,7 +83,7 @@ test('updatePolicy changes only the fields provided', () => {
   const db = freshDb();
   const id = addPolicy(db, {
     policyNumber: 'FD-001', institution: 'HDFC', holder: 'Raviraj', nominee: 'Someone',
-    receivedAmount: 100000, roi: 6.5, maturityDate: '2027-01-01'
+    amountInvested: 100000, roi: 6.5, maturityDate: '2027-01-01'
   });
 
   updatePolicy(db, id, { roi: 7.25 });
@@ -97,7 +97,7 @@ test('deletePolicy removes the row and reports success', () => {
   const db = freshDb();
   const id = addPolicy(db, {
     policyNumber: 'FD-001', institution: 'HDFC', holder: 'Raviraj', nominee: 'Someone',
-    receivedAmount: 100000, roi: 6.5, maturityDate: '2027-01-01'
+    amountInvested: 100000, roi: 6.5, maturityDate: '2027-01-01'
   });
 
   const deleted = deletePolicy(db, id);
@@ -112,13 +112,13 @@ test('policy_number UNIQUE constraint rejects duplicates', () => {
   const db = freshDb();
   addPolicy(db, {
     policyNumber: 'FD-001', institution: 'HDFC', holder: 'Raviraj', nominee: 'Someone',
-    receivedAmount: 100000, roi: 6.5, maturityDate: '2027-01-01'
+    amountInvested: 100000, roi: 6.5, maturityDate: '2027-01-01'
   });
 
   assert.throws(() => {
     addPolicy(db, {
       policyNumber: 'FD-001', institution: 'SBI', holder: 'Raviraj', nominee: 'Someone',
-      receivedAmount: 50000, roi: 6.0, maturityDate: '2026-01-01'
+      amountInvested: 50000, roi: 6.0, maturityDate: '2026-01-01'
     });
   }, /UNIQUE/);
 });
@@ -132,11 +132,11 @@ test('getPortfolioSummary aggregates totals, by-institution breakdown, and upcom
 
   addPolicy(db, {
     policyNumber: 'FD-001', institution: 'HDFC', holder: 'Raviraj', nominee: 'Someone',
-    receivedAmount: 100000, roi: 6.5, maturityDate: soonStr
+    amountInvested: 100000, roi: 6.5, maturityDate: soonStr
   });
   addPolicy(db, {
     policyNumber: 'FD-002', institution: 'SBI', holder: 'Raviraj', nominee: 'Someone',
-    receivedAmount: 200000, roi: 7.5, maturityDate: far
+    amountInvested: 200000, roi: 7.5, maturityDate: far
   });
 
   const summary = getPortfolioSummary(db, { upcomingWithinDays: 30 });

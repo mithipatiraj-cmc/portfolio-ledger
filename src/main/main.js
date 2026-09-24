@@ -1,6 +1,7 @@
 'use strict';
 
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+require('dotenv').config();
 const path = require('node:path');
 const fs = require('node:fs');
 const db = require('./db.js');
@@ -27,6 +28,11 @@ function createWindow() {
 
 app.whenReady().then(() => {
   database = db.initDb(getDbPath());
+
+  if (process.env.RESET_DB === 'true') {
+    db.recreateDbSchema(database);
+    console.log('Database schema recreated.');
+  }
 
   // --- IPC handlers: the renderer never touches SQLite directly ---
   ipcMain.handle('policies:list', () => db.listPolicies(database));

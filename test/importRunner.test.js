@@ -24,14 +24,14 @@ function row(overrides = {}) {
   const base = {
     policyNumber: 'FD-001', instrument: 'FD', startDate: '2024-01-01', maturityDate: '2027-01-01',
     termTotal: '3y', institution: 'HDFC', branch: 'Koramangala', holder: 'Raviraj', jointHolder: '',
-    nominee: 'Someone', receivedAmount: 100000, roi: 6.5, compoundingPeriodsPerYear: 4,
+    nominee: 'Someone', amountInvested: 100000, roi: 6.5, compoundingPeriodsPerYear: 4,
     maturityAmount: 121000, destinationAccount: '1234567890', destinationBank: 'ICICI'
   };
   const merged = { ...base, ...overrides };
   return [
     merged.policyNumber, merged.instrument, merged.startDate, merged.maturityDate, merged.termTotal,
     merged.institution, merged.branch, merged.holder, merged.jointHolder, merged.nominee, '',
-    merged.receivedAmount, merged.roi, merged.compoundingPeriodsPerYear, merged.maturityAmount,
+    merged.amountInvested, merged.roi, merged.compoundingPeriodsPerYear, merged.maturityAmount,
     merged.destinationAccount, merged.destinationBank
   ];
 }

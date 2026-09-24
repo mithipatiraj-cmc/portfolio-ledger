@@ -17,7 +17,7 @@ const HEADER_TO_FIELD = {
   'holder': 'holder',
   'joint holder': 'jointHolder',
   'nominee': 'nominee',
-  'received amount': 'receivedAmount',
+  'amount': 'amountInvested',
   'roi': 'roi',
   'compounding periods per year': 'compoundingPeriodsPerYear',
   'mat amount': 'maturityAmount',
@@ -25,8 +25,8 @@ const HEADER_TO_FIELD = {
   'proceeds directed to bank': 'destinationBank'
 };
 
-const REQUIRED_FIELDS = ['policyNumber', 'institution', 'receivedAmount', 'maturityDate'];
-const NUMERIC_FIELDS = ['receivedAmount', 'roi', 'compoundingPeriodsPerYear', 'maturityAmount'];
+const REQUIRED_FIELDS = ['policyNumber', 'institution', 'amountInvested', 'maturityDate'];
+const NUMERIC_FIELDS = ['amountInvested', 'roi', 'compoundingPeriodsPerYear', 'maturityAmount'];
 
 function normalizeHeader(h) {
   return String(h ?? '').trim().toLowerCase().replace(/\s+/g, ' ');

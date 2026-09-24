@@ -20,7 +20,7 @@ Mapped directly from your current Excel columns — this is the shape of *one re
 | `holder` | Holder | string |  |
 | `jointHolder` | Joint Holder | string, optional |  |
 | `nominee` | Nominee | string |  |
-| `receivedAmount` | Received amount | number | Principal invested |
+| `amountInvested` |  Amount | number | Principal invested |
 | `roi` | ROI | number (%) |  |
 | `compoundingPeriodsPerYear` | Compounding periods per year | number | 1, 2, 4, 12, etc. |
 | `maturityAmount` | Mat Amount | number |  |
@@ -77,7 +77,7 @@ CREATE TABLE policies (
   start_date TEXT,
   maturity_date TEXT,
   term_total TEXT,
-  received_amount REAL,
+  amount_invested REAL,
   roi REAL,
   compounding_periods_per_year INTEGER,
   maturity_amount REAL,
@@ -102,7 +102,7 @@ CREATE TABLE policies (
 1. **Upload** — drag-and-drop or file picker, accepts `.xlsx`/`.xls` (parsed client-side with SheetJS — no data leaves the browser).
 2. **Auto-map columns** — match Excel headers to schema fields by name; show a mapping screen only for anything that doesn't match automatically, with a manual dropdown to correct it.
 3. **Preview & validate** — show parsed rows in a table before committing. Flag rows with:
-   - missing required fields (Policy No, Institution, Received amount, Maturity Date)
+   - missing required fields (Policy No, Institution, Amount Invested, Maturity Date)
    - unparseable dates or non-numeric amounts/ROI
    - Invalid rows are shown inline, editable right there, not silently dropped.
 4. **Duplicate handling** — match on `policyNumber` for the policy row itself. If a row's Policy No already exists, show a diff (old vs. new per field) and let the user choose **Skip / Overwrite / Merge**, per row or applied to all. Separately, for each institution/person/destination referenced in a row: look it up by exact match against the relevant lookup table; if not found, create it. (A "did you mean X?" fuzzy-match nudge for near-matches — e.g. "HDFC" vs "HDFC Bank" — is worth adding once the basic import works, to catch typos before they create duplicate lookup entries.)

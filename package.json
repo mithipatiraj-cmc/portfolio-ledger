@@ -25,15 +25,21 @@
       "output": "dist"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Office"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "category": "public.app-category.finance"
     },
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     }
   },
   "devDependencies": {
@@ -41,6 +47,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "dotenv": "^18.0.3",
     "xlsx": "^0.18.5"
   }
 }

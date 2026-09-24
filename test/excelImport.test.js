@@ -76,7 +76,7 @@ test('parseWorkbook parses a real .xlsx buffer end-to-end with the actual column
   assert.deepEqual(errors, []);
   assert.equal(data.policyNumber, 'FD-001');
   assert.equal(data.institution, 'HDFC');
-  assert.equal(data.receivedAmount, 100000);
+  assert.equal(data.amountInvested, 100000);
   assert.equal(data.roi, 6.5);
   assert.equal(data.destinationAccount, '1234567890');
   assert.equal(data.destinationBank, 'ICICI');

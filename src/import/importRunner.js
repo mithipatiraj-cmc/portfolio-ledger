@@ -10,7 +10,7 @@ function toComparableShape(dbRow) {
     startDate: dbRow.start_date,
     maturityDate: dbRow.maturity_date,
     termTotal: dbRow.term_total,
-    receivedAmount: dbRow.received_amount,
+    amountInvested: dbRow.amount_invested,
     roi: dbRow.roi,
     compoundingPeriodsPerYear: dbRow.compounding_periods_per_year,
     maturityAmount: dbRow.maturity_amount,
@@ -67,7 +67,7 @@ function commitImport(database, dbModule, buffer) {
         start_date: row.data.startDate,
         maturity_date: row.data.maturityDate,
         term_total: row.data.termTotal,
-        received_amount: row.data.receivedAmount,
+        amount_invested: row.data.amountInvested,
         roi: row.data.roi,
         compounding_periods_per_year: row.data.compoundingPeriodsPerYear,
         maturity_amount: row.data.maturityAmount

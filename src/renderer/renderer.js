@@ -11,7 +11,7 @@ const EDITABLE_COLUMNS = [
   { key: 'institution', dbField: null }, // lookup field — read-only inline for v1, edited via import/re-entry
   { key: 'holder', dbField: null },
   { key: 'nominee', dbField: null },
-  { key: 'received_amount', dbField: 'received_amount', numeric: true },
+  { key: 'amount_invested', dbField: 'amount_invested', numeric: true },
   { key: 'roi', dbField: 'roi', numeric: true },
   { key: 'maturity_date', dbField: 'maturity_date' }
 ];
@@ -21,7 +21,7 @@ async function refresh() {
     window.api.listPolicies(),
     window.api.getPortfolioSummary({ upcomingWithinDays: 30 })
   ]);
-  renderSummary(summary);
+  rende   rSummary(summary);
   renderTable(policies);
 }
 
@@ -87,7 +87,7 @@ addRowBtn.addEventListener('click', async () => {
     institution: 'Unnamed',
     holder: 'Unnamed',
     nominee: 'Unnamed',
-    receivedAmount: 0,
+    amountInvested: 0,
     roi: 0,
     maturityDate: new Date().toISOString().slice(0, 10)
   });

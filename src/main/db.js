@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS people (
 
 CREATE TABLE IF NOT EXISTS destinations (
   id INTEGER PRIMARY KEY,
-  bank TEXT NOT NULL,
-  account TEXT NOT NULL,
+  bank TEXT,
+  account TEXT,
   UNIQUE(bank, account)
 );
 
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS policies (
   start_date TEXT,
   maturity_date TEXT,
   term_total TEXT,
-  received_amount REAL,
+  amount_invested REAL,
   roi REAL,
   compounding_periods_per_year INTEGER,
   maturity_amount REAL,
@@ -51,6 +51,20 @@ function initDb(dbPath) {
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
   return db;
+}
+
+function recreateDbSchema(db) {
+  db.exec('PRAGMA foreign_keys = OFF;');
+
+  db.exec(`
+    DROP TABLE IF EXISTS policies;
+    DROP TABLE IF EXISTS institutions;
+    DROP TABLE IF EXISTS people;
+    DROP TABLE IF EXISTS destinations;
+  `);
+
+  db.exec('PRAGMA foreign_keys = ON;');
+  db.exec(SCHEMA);
 }
 
 /** Insert a lookup row if it doesn't already exist (by its UNIQUE constraint), return its id either way. */
@@ -97,7 +111,7 @@ function addPolicy(db, p) {
     .prepare(
       `INSERT INTO policies (
         policy_number, instrument, start_date, maturity_date, term_total,
-        received_amount, roi, compounding_periods_per_year, maturity_amount,
+        amount_invested, roi, compounding_periods_per_year, maturity_amount,
         institution_id, holder_id, joint_holder_id, nominee_id, destination_id
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
@@ -107,7 +121,7 @@ function addPolicy(db, p) {
       p.startDate ?? null,
       p.maturityDate ?? null,
       p.termTotal ?? null,
-      p.receivedAmount ?? null,
+      p.amountInvested ?? null,
       p.roi ?? null,
       p.compoundingPeriodsPerYear ?? null,
       p.maturityAmount ?? null,
@@ -123,7 +137,7 @@ function addPolicy(db, p) {
 function updatePolicy(db, id, fields) {
   const allowed = [
     'policy_number', 'instrument', 'start_date', 'maturity_date', 'term_total',
-    'received_amount', 'roi', 'compounding_periods_per_year', 'maturity_amount'
+    'amount_invested', 'roi', 'compounding_periods_per_year', 'maturity_amount'
   ];
   const sets = [];
   const values = [];
@@ -150,7 +164,7 @@ function listPolicies(db) {
     .prepare(
       `SELECT
         p.id, p.policy_number, p.instrument, p.start_date, p.maturity_date, p.term_total,
-        p.received_amount, p.roi, p.compounding_periods_per_year, p.maturity_amount,
+        p.amount_invested, p.roi, p.compounding_periods_per_year, p.maturity_amount,
         i.name AS institution, i.branch AS branch,
         h.name AS holder, jh.name AS joint_holder, n.name AS nominee,
         d.bank AS destination_bank, d.account AS destination_account
@@ -168,13 +182,13 @@ function listPolicies(db) {
 /** Aggregate summary used by the dashboard and, later, the AI recommendation prompt. */
 function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
   const totals = db
-    .prepare('SELECT COUNT(*) AS count, COALESCE(SUM(received_amount), 0) AS total FROM policies')
+    .prepare('SELECT COUNT(*) AS count, COALESCE(SUM(amount_invested), 0) AS total FROM policies')
     .get();
 
   const byInstitution = db
     .prepare(
       `SELECT i.name AS institution, COUNT(*) AS count,
-              COALESCE(SUM(p.received_amount), 0) AS totalAmount,
+              COALESCE(SUM(p.amount_invested), 0) AS totalAmount,
               COALESCE(AVG(p.roi), 0) AS avgROI
        FROM policies p
        LEFT JOIN institutions i ON i.id = p.institution_id
@@ -191,7 +205,7 @@ function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
   const upcomingMaturities = db
     .prepare(
       `SELECT p.policy_number AS policyNumber, p.maturity_date AS maturityDate,
-              p.received_amount AS amount, i.name AS institution
+              p.amount_invested AS amount, i.name AS institution
        FROM policies p
        LEFT JOIN institutions i ON i.id = p.institution_id
        WHERE p.maturity_date BETWEEN ? AND ?
@@ -214,6 +228,7 @@ function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
 
 module.exports = {
   initDb,
+  recreateDbSchema,
   upsertInstitution,
   upsertPerson,
   upsertDestination,
