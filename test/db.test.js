@@ -7,6 +7,7 @@ const {
   addPolicy,
   updatePolicy,
   deletePolicy,
+  restorePolicy,
   listPolicies,
   getPortfolioSummary,
   upsertInstitution,
@@ -94,19 +95,55 @@ test('updatePolicy changes only the fields provided', () => {
   assert.equal(row.policy_number, 'FD-001', 'untouched fields should be unchanged');
 });
 
-test('deletePolicy removes the row and reports success', () => {
+test('deletePolicy soft-deletes: hidden from lists and totals, but the row is kept', () => {
   const db = freshDb();
   const id = addPolicy(db, {
     policyNumber: 'FD-001', institution: 'HDFC', holder: 'Raviraj', nominee: 'Someone',
     amountInvested: 100000, roi: 6.5, maturityDate: '2027-01-01'
   });
 
-  const deleted = deletePolicy(db, id);
-  assert.equal(deleted, true);
+  assert.equal(deletePolicy(db, id), true);
   assert.equal(listPolicies(db).length, 0);
+  assert.equal(getPortfolioSummary(db).accountCount, 0);
+  assert.equal(getPortfolioSummary(db).totalInvested, 0);
 
-  const deletedAgain = deletePolicy(db, id);
-  assert.equal(deletedAgain, false, 'deleting a non-existent id should report false, not throw');
+  const withDeleted = listPolicies(db, { includeDeleted: true });
+  assert.equal(withDeleted.length, 1);
+  assert.ok(withDeleted[0].deleted_at, 'deleted_at is stamped');
+
+  assert.equal(deletePolicy(db, id), false, 'deleting an already-deleted policy reports false');
+  assert.equal(deletePolicy(db, 9999), false, 'deleting a non-existent id should report false, not throw');
+});
+
+test('restorePolicy brings a soft-deleted policy back', () => {
+  const db = freshDb();
+  const id = addPolicy(db, { policyNumber: 'FD-001', institution: 'HDFC', amountInvested: 5000, maturityDate: '2027-01-01' });
+  deletePolicy(db, id);
+
+  assert.equal(restorePolicy(db, id), true);
+  const [row] = listPolicies(db);
+  assert.equal(row.policy_number, 'FD-001');
+  assert.equal(row.deleted_at, null);
+  assert.equal(restorePolicy(db, id), false, 'restoring an active policy reports false');
+});
+
+test('initDb adds the deleted_at column to databases created before soft delete', () => {
+  const path = require('node:path');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const { DatabaseSync } = require('node:sqlite');
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pl-')), 'nodel.sqlite');
+
+  const old = new DatabaseSync(dbPath);
+  old.exec('CREATE TABLE policies (id INTEGER PRIMARY KEY, policy_number TEXT UNIQUE, amount_invested REAL);');
+  old.exec("INSERT INTO policies (policy_number, amount_invested) VALUES ('FD-OLD', 1);");
+  old.close();
+
+  const db = initDb(dbPath);
+  const cols = db.prepare('PRAGMA table_info(policies)').all().map((c) => c.name);
+  assert.ok(cols.includes('deleted_at'));
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM policies WHERE deleted_at IS NULL').get().n, 1);
+  db.close();
 });
 
 test('policy_number UNIQUE constraint rejects duplicates', () => {

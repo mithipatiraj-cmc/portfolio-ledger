@@ -127,3 +127,36 @@ test('commitImport: mixed batch (new + duplicate-identical + duplicate-changed +
   assert.equal(result.invalid.length, 1);
   assert.equal(dbModule.listPolicies(database).length, 3);
 });
+
+test('commitImport: policies soft-deleted in the app are not re-added or updated by a re-import', () => {
+  const database = dbModule.initDb(':memory:');
+  const buffer = buildWorkbookBuffer([row({ policyNumber: 'FD-001' }), row({ policyNumber: 'FD-002' })]);
+  commitImport(database, dbModule, buffer);
+
+  const fd1 = dbModule.listPolicies(database).find((p) => p.policy_number === 'FD-001');
+  dbModule.deletePolicy(database, fd1.id);
+
+  const changed = buildWorkbookBuffer([row({ policyNumber: 'FD-001', roi: 9.9 }), row({ policyNumber: 'FD-002' })]);
+  const result = commitImport(database, dbModule, changed);
+
+  assert.deepEqual(result.deletedSkipped, ['FD-001']);
+  assert.equal(result.added, 0);
+  assert.equal(result.updated, 0);
+  assert.equal(result.skipped, 1);
+  const stillDeleted = dbModule.listPolicies(database, { includeDeleted: true }).find((p) => p.policy_number === 'FD-001');
+  assert.ok(stillDeleted.deleted_at);
+  assert.equal(stillDeleted.roi, 6.5, 'deleted policy is left untouched');
+});
+
+test('commitImport: sheetName imports from the chosen sheet of a multi-sheet workbook', () => {
+  const database = dbModule.initDb(':memory:');
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Notes'], ['nothing here']]), 'Notes');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([HEADERS, row({ policyNumber: 'FD-777' })]), 'Policies');
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  const result = commitImport(database, dbModule, buffer, { sheetName: 'Policies' });
+
+  assert.equal(result.added, 1);
+  assert.equal(dbModule.listPolicies(database)[0].policy_number, 'FD-777');
+});

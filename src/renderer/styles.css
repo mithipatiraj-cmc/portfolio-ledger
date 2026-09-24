@@ -147,3 +147,43 @@ tbody tr:hover { background: #fafaf8; }
   color: #6b6560;
   border: 1px solid #e6e2db;
 }
+/* --- Soft delete --- */
+.toggle {
+  margin-left: 12px;
+  color: #6b6560;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+tr.deleted td {
+  color: #a8a29a;
+  text-decoration: line-through;
+}
+
+tr.deleted td:last-child { text-decoration: none; }
+
+.restore-btn {
+  background: #fff;
+  color: #2f6f4e;
+  border: 1px solid #2f6f4e;
+}
+
+/* --- Import sheet picker --- */
+.sheet-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.sheet-picker.hidden { display: none; }
+
+.sheet-picker select {
+  flex: 1;
+  padding: 5px 6px;
+  border: 1px solid #e6e2db;
+  border-radius: 6px;
+  font-size: 0.83rem;
+}

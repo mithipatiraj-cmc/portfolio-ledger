@@ -12,6 +12,9 @@ const mappingModal = document.getElementById('mappingModal');
 const mappingRows = document.getElementById('mappingRows');
 const mappingCancelBtn = document.getElementById('mappingCancelBtn');
 const mappingCommitBtn = document.getElementById('mappingCommitBtn');
+const showDeleted = document.getElementById('showDeleted');
+const sheetPicker = document.getElementById('sheetPicker');
+const sheetSelect = document.getElementById('sheetSelect');
 
 const EDITABLE_COLUMNS = [
   { key: 'policy_number', dbField: 'policy_number' },
@@ -53,8 +56,10 @@ clearFilterBtn.addEventListener('click', () => {
   applyFilterAndRender();
 });
 
+showDeleted.addEventListener('change', () => refresh());
+
 async function refresh() {
-  allPolicies = await window.api.listPolicies();
+  allPolicies = await window.api.listPolicies({ includeDeleted: showDeleted.checked });
   applyFilterAndRender();
 }
 
@@ -70,28 +75,39 @@ function renderTable(policies) {
   for (const row of policies) {
     const tr = document.createElement('tr');
     tr.dataset.id = row.id;
+    const isDeleted = Boolean(row.deleted_at);
+    if (isDeleted) {
+      tr.classList.add('deleted');
+      tr.title = `Deleted ${row.deleted_at} (UTC)`;
+    }
 
     for (const col of EDITABLE_COLUMNS) {
       const td = document.createElement('td');
       const value = row[col.key] ?? '';
-      if (col.dbField) {
+      if (col.dbField && !isDeleted) {
         td.contentEditable = 'true';
         td.textContent = value;
         td.addEventListener('blur', () => onCellEdit(row.id, col, td));
       } else {
-        // Lookup-derived fields (institution/holder/nominee): plain text for now.
+        // Lookup-derived fields (institution/holder/nominee) and deleted rows: plain text.
         td.textContent = value;
-        td.classList.add('lookup-cell');
+        if (!col.dbField) td.classList.add('lookup-cell');
       }
       tr.appendChild(td);
     }
 
-    const deleteTd = document.createElement('td');
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', () => onDelete(row.id));
-    deleteTd.appendChild(deleteBtn);
-    tr.appendChild(deleteTd);
+    const actionTd = document.createElement('td');
+    const actionBtn = document.createElement('button');
+    if (isDeleted) {
+      actionBtn.textContent = 'Restore';
+      actionBtn.className = 'restore-btn';
+      actionBtn.addEventListener('click', () => onRestore(row.id));
+    } else {
+      actionBtn.textContent = 'Delete';
+      actionBtn.addEventListener('click', () => onDelete(row.id));
+    }
+    actionTd.appendChild(actionBtn);
+    tr.appendChild(actionTd);
 
     tableBody.appendChild(tr);
   }
@@ -108,8 +124,13 @@ async function onCellEdit(id, col, td) {
 }
 
 async function onDelete(id) {
-  if (!confirm('Delete this policy?')) return;
+  if (!confirm('Delete this policy? You can restore it later via "Show deleted".')) return;
   await window.api.deletePolicy(id);
+  await refresh();
+}
+
+async function onRestore(id) {
+  await window.api.restorePolicy(id);
   await refresh();
 }
 
@@ -133,10 +154,40 @@ importBtn.addEventListener('click', async () => {
 });
 
 let currentImportFilePath = null;
+let currentImportSheet = null;
 
 function openMappingModal(preview) {
   currentImportFilePath = preview.filePath;
+
+  // Sheet picker: only shown when the workbook has more than one sheet.
+  sheetSelect.innerHTML = '';
+  for (const name of preview.sheetNames) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sheetSelect.appendChild(opt);
+  }
+  sheetPicker.classList.toggle('hidden', preview.sheetNames.length < 2);
+
+  renderMappingRows(preview);
+  mappingModal.classList.remove('hidden');
+}
+
+sheetSelect.addEventListener('change', async () => {
+  const preview = await window.api.importPreviewSheet(currentImportFilePath, sheetSelect.value);
+  renderMappingRows(preview);
+});
+
+/** Rebuild the column → field dropdowns for the previewed sheet. */
+function renderMappingRows(preview) {
+  currentImportSheet = preview.sheetName;
+  sheetSelect.value = preview.sheetName;
   mappingRows.innerHTML = '';
+
+  if (preview.headerRow.length === 0) {
+    mappingRows.textContent = 'This sheet is empty.';
+    return;
+  }
 
   preview.headerRow.forEach((header, colIndex) => {
     if (header === null || header === '') return; // skip genuinely blank columns
@@ -163,14 +214,15 @@ function openMappingModal(preview) {
     row.appendChild(select);
     mappingRows.appendChild(row);
   });
-
-  mappingModal.classList.remove('hidden');
 }
 
-mappingCancelBtn.addEventListener('click', () => {
+function closeMappingModal() {
   mappingModal.classList.add('hidden');
   currentImportFilePath = null;
-});
+  currentImportSheet = null;
+}
+
+mappingCancelBtn.addEventListener('click', closeMappingModal);
 
 mappingCommitBtn.addEventListener('click', async () => {
   const columnMapping = {};
@@ -178,11 +230,14 @@ mappingCommitBtn.addEventListener('click', async () => {
     columnMapping[select.dataset.colIndex] = select.value; // '' means "ignore this column"
   });
 
-  const result = await window.api.importCommit(currentImportFilePath, columnMapping);
-  mappingModal.classList.add('hidden');
-  currentImportFilePath = null;
+  const result = await window.api.importCommit(currentImportFilePath, currentImportSheet, columnMapping);
+  closeMappingModal();
 
   let msg = `Import complete: ${result.added} added, ${result.updated} updated, ${result.skipped} unchanged.`;
+  if (result.deletedSkipped.length) {
+    msg += `\n\n${result.deletedSkipped.length} row(s) skipped because you deleted them in the app ` +
+      `(restore via "Show deleted"): ${result.deletedSkipped.join(', ')}`;
+  }
   if (result.invalid.length) {
     msg += `\n\n${result.invalid.length} row(s) skipped due to errors:\n` +
       result.invalid.map((r) => `- ${r.policyNumber || '(no policy number)'}: ${r.errors.join('; ')}`).join('\n');

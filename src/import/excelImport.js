@@ -139,12 +139,18 @@ function parseWorkbook(buffer, { sheetName, columnMapping } = {}) {
   return { rows, unmappedHeaders: unmapped };
 }
 
-function readGrid(buffer, sheetName) {
+/** Read one sheet (default: the first) as a grid of rows, plus every sheet name in the workbook. */
+function readSheet(buffer, sheetName) {
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false });
   const name = sheetName || workbook.SheetNames[0];
   const sheet = workbook.Sheets[name];
   if (!sheet) throw new Error(`Sheet "${name}" not found in workbook`);
-  return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+  const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+  return { grid, sheetName: name, sheetNames: workbook.SheetNames };
+}
+
+function readGrid(buffer, sheetName) {
+  return readSheet(buffer, sheetName).grid;
 }
 
 /**
@@ -168,11 +174,20 @@ function applyColumnMapping(headerRow, columnMapping) {
 /**
  * First step of the import wizard: the header row plus the auto-detected
  * mapping, so the UI can let the user confirm or correct it before committing.
+ * sheetNames lets the UI offer a sheet picker; sheetName is the one previewed.
  */
 function getImportPreview(buffer, { sheetName } = {}) {
-  const [headerRow = []] = readGrid(buffer, sheetName);
+  const sheet = readSheet(buffer, sheetName);
+  const [headerRow = []] = sheet.grid;
   const { mapping, unmapped } = autoMapHeaders(headerRow);
-  return { headerRow, mapping, unmapped, schemaFields: SCHEMA_FIELDS };
+  return {
+    sheetName: sheet.sheetName,
+    sheetNames: sheet.sheetNames,
+    headerRow,
+    mapping,
+    unmapped,
+    schemaFields: SCHEMA_FIELDS
+  };
 }
 
 function validateRow(data) {

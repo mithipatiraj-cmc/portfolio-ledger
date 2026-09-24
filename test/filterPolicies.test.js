@@ -76,3 +76,13 @@ test('summarizePolicies totals only the policies passed in (i.e. the filtered se
   });
   assert.deepEqual(summarizePolicies([], { today }), { accountCount: 0, totalInvested: 0, upcomingCount: 0 });
 });
+
+test('summarizePolicies ignores soft-deleted rows shown via "Show deleted"', () => {
+  const { summarizePolicies } = require('../src/renderer/filterPolicies.js');
+  const today = new Date('2026-09-24T00:00:00Z');
+  const policies = [
+    { amount_invested: 1000, maturity_date: '2026-10-01', deleted_at: null },
+    { amount_invested: 5000, maturity_date: '2026-10-01', deleted_at: '2026-09-20 10:00:00' }
+  ];
+  assert.deepEqual(summarizePolicies(policies, { today }), { accountCount: 1, totalInvested: 1000, upcomingCount: 1 });
+});

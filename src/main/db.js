@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS policies (
   holder_id INTEGER REFERENCES people(id),
   joint_holder_id INTEGER REFERENCES people(id),
   nominee_id INTEGER REFERENCES people(id),
-  destination_id INTEGER REFERENCES destinations(id)
+  destination_id INTEGER REFERENCES destinations(id),
+  deleted_at TEXT -- soft delete: set when the user deletes, NULL while active
 );
 `;
 
@@ -60,6 +61,9 @@ function migrate(db) {
   const policyColumns = db.prepare('PRAGMA table_info(policies)').all().map((c) => c.name);
   if (policyColumns.includes('received_amount') && !policyColumns.includes('amount_invested')) {
     db.exec('ALTER TABLE policies RENAME COLUMN received_amount TO amount_invested;');
+  }
+  if (!policyColumns.includes('deleted_at')) {
+    db.exec('ALTER TABLE policies ADD COLUMN deleted_at TEXT;');
   }
   normalizeLookupNames(db);
 }
@@ -234,18 +238,29 @@ function updatePolicy(db, id, fields) {
   return true;
 }
 
+/** Soft delete: the row stays (restorable, and re-import won't re-add it) but is hidden from lists and totals. */
 function deletePolicy(db, id) {
-  const info = db.prepare('DELETE FROM policies WHERE id = ?').run(id);
+  const info = db
+    .prepare("UPDATE policies SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL")
+    .run(id);
   return Number(info.changes) > 0;
 }
 
-/** List all policies with their lookup fields resolved (joined), sorted by soonest maturity first. */
-function listPolicies(db) {
+function restorePolicy(db, id) {
+  const info = db.prepare('UPDATE policies SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL').run(id);
+  return Number(info.changes) > 0;
+}
+
+/**
+ * List policies with their lookup fields resolved (joined), sorted by soonest maturity first.
+ * Soft-deleted policies are left out unless includeDeleted is set.
+ */
+function listPolicies(db, { includeDeleted = false } = {}) {
   return db
     .prepare(
       `SELECT
         p.id, p.policy_number, p.instrument, p.start_date, p.maturity_date, p.term_total,
-        p.amount_invested, p.roi, p.compounding_periods_per_year, p.maturity_amount,
+        p.amount_invested, p.roi, p.compounding_periods_per_year, p.maturity_amount, p.deleted_at,
         i.name AS institution, i.branch AS branch,
         h.name AS holder, jh.name AS joint_holder, n.name AS nominee,
         d.bank AS destination_bank, d.account AS destination_account
@@ -255,6 +270,7 @@ function listPolicies(db) {
       LEFT JOIN people jh ON jh.id = p.joint_holder_id
       LEFT JOIN people n ON n.id = p.nominee_id
       LEFT JOIN destinations d ON d.id = p.destination_id
+      ${includeDeleted ? '' : 'WHERE p.deleted_at IS NULL'}
       ORDER BY p.maturity_date ASC`
     )
     .all();
@@ -263,7 +279,7 @@ function listPolicies(db) {
 /** Aggregate summary used by the dashboard and, later, the AI recommendation prompt. */
 function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
   const totals = db
-    .prepare('SELECT COUNT(*) AS count, COALESCE(SUM(amount_invested), 0) AS total FROM policies')
+    .prepare('SELECT COUNT(*) AS count, COALESCE(SUM(amount_invested), 0) AS total FROM policies WHERE deleted_at IS NULL')
     .get();
 
   const byInstitution = db
@@ -273,6 +289,7 @@ function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
               COALESCE(AVG(p.roi), 0) AS avgROI
        FROM policies p
        LEFT JOIN institutions i ON i.id = p.institution_id
+       WHERE p.deleted_at IS NULL
        GROUP BY i.name
        ORDER BY totalAmount DESC`
     )
@@ -289,13 +306,13 @@ function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
               p.amount_invested AS amount, i.name AS institution
        FROM policies p
        LEFT JOIN institutions i ON i.id = p.institution_id
-       WHERE p.maturity_date BETWEEN ? AND ?
+       WHERE p.deleted_at IS NULL AND p.maturity_date BETWEEN ? AND ?
        ORDER BY p.maturity_date ASC`
     )
     .all(today, cutoffStr);
 
   const roiRange = db
-    .prepare('SELECT MIN(roi) AS min, MAX(roi) AS max, AVG(roi) AS avg FROM policies WHERE roi IS NOT NULL')
+    .prepare('SELECT MIN(roi) AS min, MAX(roi) AS max, AVG(roi) AS avg FROM policies WHERE roi IS NOT NULL AND deleted_at IS NULL')
     .get();
 
   return {
@@ -316,6 +333,7 @@ module.exports = {
   addPolicy,
   updatePolicy,
   deletePolicy,
+  restorePolicy,
   listPolicies,
   getPortfolioSummary
 };

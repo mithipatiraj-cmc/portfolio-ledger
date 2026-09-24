@@ -34,9 +34,11 @@
 
   /**
    * Header summary for whichever policies are currently shown, so it follows
-   * the filter. Dates are ISO 'YYYY-MM-DD' strings, compared lexically.
+   * the filter. Soft-deleted rows (shown via "Show deleted") never count.
+   * Dates are ISO 'YYYY-MM-DD' strings, compared lexically.
    */
-  function summarizePolicies(policies, { upcomingWithinDays = 30, today = new Date() } = {}) {
+  function summarizePolicies(allShown, { upcomingWithinDays = 30, today = new Date() } = {}) {
+    const policies = allShown.filter((p) => !p.deleted_at);
     const todayStr = today.toISOString().slice(0, 10);
     const cutoff = new Date(today);
     cutoff.setDate(cutoff.getDate() + upcomingWithinDays);

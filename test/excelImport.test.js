@@ -203,3 +203,23 @@ test('classifyForImport: invalid rows stay invalid regardless of existing data',
   const result = classifyForImport(parsed, new Map());
   assert.equal(result[0].status, 'invalid');
 });
+test('getImportPreview: lists every sheet and previews the requested one', () => {
+  const { getImportPreview } = require('../src/import/excelImport.js');
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Notes']]), 'Notes');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([REAL_HEADERS, row_stub()]), 'FDs');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([]), 'Empty');
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  const first = getImportPreview(buffer);
+  assert.deepEqual(first.sheetNames, ['Notes', 'FDs', 'Empty']);
+  assert.equal(first.sheetName, 'Notes', 'defaults to the first sheet');
+  assert.deepEqual(first.headerRow, ['Notes']);
+
+  const fds = getImportPreview(buffer, { sheetName: 'FDs' });
+  assert.equal(fds.sheetName, 'FDs');
+  assert.equal(Object.keys(fds.mapping).length, 16);
+
+  assert.deepEqual(getImportPreview(buffer, { sheetName: 'Empty' }).headerRow, []);
+  assert.throws(() => getImportPreview(buffer, { sheetName: 'Nope' }), /not found/);
+});

@@ -28,7 +28,8 @@ function toComparableShape(dbRow) {
  * Parse an Excel buffer and commit its rows against an open db.
  * 'new' rows are inserted; 'duplicate-changed' rows overwrite the existing
  * policy; 'duplicate-identical' rows are skipped; 'invalid' rows are skipped
- * and reported back for the user to fix by hand (spec §2 step 3/4).
+ * and reported back for the user to fix by hand (spec §2 step 3/4). Rows
+ * matching a soft-deleted policy are skipped and listed in deletedSkipped.
  *
   * @param {Buffer} buffer - raw .xlsx file contents
  * @param {object} [opts]
@@ -40,18 +41,24 @@ function toComparableShape(dbRow) {
 function commitImport(database, dbModule, buffer, opts = {}) {
   const { rows, unmappedHeaders } = parseWorkbook(buffer, opts);
 
-  const existingRows = dbModule.listPolicies(database);
+  const existingRows = dbModule.listPolicies(database, { includeDeleted: true });
   const existingByPolicyNumber = new Map(
     existingRows.map((r) => [r.policy_number, { id: r.id, ...toComparableShape(r) }])
   );
+  const deletedPolicyNumbers = new Set(existingRows.filter((r) => r.deleted_at).map((r) => r.policy_number));
 
   const classified = classifyForImport(rows, existingByPolicyNumber);
 
-  const result = { added: 0, updated: 0, skipped: 0, invalid: [], unmappedHeaders };
+  const result = { added: 0, updated: 0, skipped: 0, deletedSkipped: [], invalid: [], unmappedHeaders };
 
   for (const row of classified) {
     if (row.status === 'invalid') {
       result.invalid.push({ policyNumber: row.data.policyNumber, errors: row.errors });
+      continue;
+    }
+    // Deleted in the app: leave it deleted rather than resurrecting or updating it.
+    if (deletedPolicyNumbers.has(row.data.policyNumber)) {
+      result.deletedSkipped.push(row.data.policyNumber);
       continue;
     }
     if (row.status === 'duplicate-identical') {

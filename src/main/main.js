@@ -51,10 +51,11 @@ app.whenReady().then(() => {
   resetDbIfRequested(getDbPath());
 
   // --- IPC handlers: the renderer never touches SQLite directly ---
-  ipcMain.handle('policies:list', () => db.listPolicies(database));
+  ipcMain.handle('policies:list', (_event, opts) => db.listPolicies(database, opts));
   ipcMain.handle('policies:add', (_event, policy) => db.addPolicy(database, policy));
   ipcMain.handle('policies:update', (_event, { id, fields }) => db.updatePolicy(database, id, fields));
   ipcMain.handle('policies:delete', (_event, id) => db.deletePolicy(database, id));
+  ipcMain.handle('policies:restore', (_event, id) => db.restorePolicy(database, id));
   ipcMain.handle('portfolio:summary', (_event, opts) => db.getPortfolioSummary(database, opts));
 
   // --- Excel import, two-step so the renderer can show a mapping UI before committing ---
@@ -72,10 +73,16 @@ app.whenReady().then(() => {
     return { filePath, ...preview };
   });
 
-  // Step 2: user confirms (or adjusts) the mapping; we re-read the same file and commit.
-  ipcMain.handle('import:commitWithMapping', (_event, { filePath, columnMapping }) => {
+  // Step 1b: user picks a different sheet in a multi-sheet workbook; re-preview that sheet.
+  ipcMain.handle('import:previewSheet', (_event, { filePath, sheetName }) => {
     const buffer = fs.readFileSync(filePath);
-    return commitImport(database, db, buffer, { columnMapping });
+    return { filePath, ...getImportPreview(buffer, { sheetName }) };
+  });
+
+  // Step 2: user confirms (or adjusts) the mapping; we re-read the same file and commit.
+  ipcMain.handle('import:commitWithMapping', (_event, { filePath, sheetName, columnMapping }) => {
+    const buffer = fs.readFileSync(filePath);
+    return commitImport(database, db, buffer, { sheetName, columnMapping });
   });
 
   createWindow();
