@@ -30,12 +30,15 @@ function toComparableShape(dbRow) {
  * policy; 'duplicate-identical' rows are skipped; 'invalid' rows are skipped
  * and reported back for the user to fix by hand (spec §2 step 3/4).
  *
- * @param {import('node:sqlite').DatabaseSync} database
- * @param {typeof import('../main/db.js')} dbModule
- * @param {Buffer} buffer - raw .xlsx file contents
+  * @param {Buffer} buffer - raw .xlsx file contents
+ * @param {object} [opts]
+ * @param {string} [opts.sheetName]
+ * @param {Object<number,string>} [opts.columnMapping] - optional manual column
+ *   mapping, passed straight through to parseWorkbook — lets a sheet with
+ *   different column names import correctly instead of failing auto-detection.
  */
-function commitImport(database, dbModule, buffer) {
-  const { rows, unmappedHeaders } = parseWorkbook(buffer);
+function commitImport(database, dbModule, buffer, opts = {}) {
+  const { rows, unmappedHeaders } = parseWorkbook(buffer, opts);
 
   const existingRows = dbModule.listPolicies(database);
   const existingByPolicyNumber = new Map(

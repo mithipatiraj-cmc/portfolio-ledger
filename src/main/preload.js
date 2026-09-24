@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('api', {
   updatePolicy: (id, fields) => ipcRenderer.invoke('policies:update', { id, fields }),
   deletePolicy: (id) => ipcRenderer.invoke('policies:delete', id),
   getPortfolioSummary: (opts) => ipcRenderer.invoke('portfolio:summary', opts),
-  importExcel: () => ipcRenderer.invoke('import:pickAndCommit')
+  importPreview: () => ipcRenderer.invoke('import:pickAndPreview'),
+  importCommit: (filePath, columnMapping) => ipcRenderer.invoke('import:commitWithMapping', { filePath, columnMapping })
 });

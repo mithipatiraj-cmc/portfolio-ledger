@@ -55,3 +55,95 @@ td[contenteditable="true"]:focus {
 .lookup-cell { color: #4a463f; }
 
 tbody tr:hover { background: #fafaf8; }
+
+/* --- Filter bar --- */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.filter-bar select,
+.filter-bar input {
+  padding: 6px 8px;
+  border: 1px solid #e6e2db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.filter-bar input { flex: 1; max-width: 280px; }
+
+.filter-bar button {
+  background: #fff;
+  color: #6b6560;
+  border: 1px solid #e6e2db;
+}
+
+.filter-count { color: #6b6560; font-size: 0.82rem; }
+
+/* --- Import mapping modal --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 27, 26, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.modal-overlay.hidden { display: none; }
+
+.modal {
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px 24px;
+  width: 560px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal h2 { margin: 0 0 8px; font-size: 1.1rem; }
+
+.modal-sub { color: #6b6560; font-size: 0.85rem; margin: 0 0 16px; }
+
+.mapping-rows { display: flex; flex-direction: column; gap: 8px; }
+
+.mapping-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mapping-header {
+  font-size: 0.85rem;
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapping-row select {
+  flex: 1;
+  padding: 5px 6px;
+  border: 1px solid #e6e2db;
+  border-radius: 6px;
+  font-size: 0.83rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.modal-actions button:first-child {
+  background: #fff;
+  color: #6b6560;
+  border: 1px solid #e6e2db;
+}

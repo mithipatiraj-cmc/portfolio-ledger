@@ -4,6 +4,14 @@ const tableBody = document.getElementById('policyTableBody');
 const summaryEl = document.getElementById('summary');
 const addRowBtn = document.getElementById('addRowBtn');
 const importBtn = document.getElementById('importBtn');
+const filterField = document.getElementById('filterField');
+const filterQuery = document.getElementById('filterQuery');
+const clearFilterBtn = document.getElementById('clearFilterBtn');
+const filterCount = document.getElementById('filterCount');
+const mappingModal = document.getElementById('mappingModal');
+const mappingRows = document.getElementById('mappingRows');
+const mappingCancelBtn = document.getElementById('mappingCancelBtn');
+const mappingCommitBtn = document.getElementById('mappingCommitBtn');
 
 const EDITABLE_COLUMNS = [
   { key: 'policy_number', dbField: 'policy_number' },
@@ -16,13 +24,40 @@ const EDITABLE_COLUMNS = [
   { key: 'maturity_date', dbField: 'maturity_date' }
 ];
 
+let allPolicies = []; // last full fetch, before any filter is applied
+
+// --- Filter bar setup ---
+for (const opt of window.PolicyFilter.FILTERABLE_FIELDS) {
+  const el = document.createElement('option');
+  el.value = opt.value;
+  el.textContent = opt.label;
+  filterField.appendChild(el);
+}
+
+function applyFilterAndRender() {
+  const filtered = window.PolicyFilter.filterPolicies(allPolicies, filterField.value, filterQuery.value);
+  renderTable(filtered);
+  filterCount.textContent = filterQuery.value.trim()
+    ? `${filtered.length} of ${allPolicies.length} shown`
+    : '';
+}
+
+filterField.addEventListener('change', applyFilterAndRender);
+filterQuery.addEventListener('input', applyFilterAndRender);
+clearFilterBtn.addEventListener('click', () => {
+  filterQuery.value = '';
+  filterField.value = 'all';
+  applyFilterAndRender();
+});
+
 async function refresh() {
   const [policies, summary] = await Promise.all([
     window.api.listPolicies(),
     window.api.getPortfolioSummary({ upcomingWithinDays: 30 })
   ]);
-  rende   rSummary(summary);
-  renderTable(policies);
+  allPolicies = policies;
+  renderSummary(summary);
+  applyFilterAndRender();
 }
 
 function renderSummary(summary) {
@@ -95,15 +130,68 @@ addRowBtn.addEventListener('click', async () => {
 });
 
 importBtn.addEventListener('click', async () => {
-  const result = await window.api.importExcel();
-  if (!result) return; // user cancelled the file picker
+  const preview = await window.api.importPreview();
+  if (!preview) return; // user cancelled the file picker
+  openMappingModal(preview);
+});
+
+let currentImportFilePath = null;
+
+function openMappingModal(preview) {
+  currentImportFilePath = preview.filePath;
+  mappingRows.innerHTML = '';
+
+  preview.headerRow.forEach((header, colIndex) => {
+    if (header === null || header === '') return; // skip genuinely blank columns
+
+    const row = document.createElement('div');
+    row.className = 'mapping-row';
+
+    const label = document.createElement('span');
+    label.className = 'mapping-header';
+    label.textContent = header;
+
+    const select = document.createElement('select');
+    select.dataset.colIndex = colIndex;
+    for (const field of preview.schemaFields) {
+      const opt = document.createElement('option');
+      opt.value = field.value;
+      opt.textContent = field.label;
+      select.appendChild(opt);
+    }
+    // Pre-fill with the auto-detected mapping, if any.
+    select.value = preview.mapping[colIndex] ?? '';
+
+    row.appendChild(label);
+    row.appendChild(select);
+    mappingRows.appendChild(row);
+  });
+
+  mappingModal.classList.remove('hidden');
+}
+
+mappingCancelBtn.addEventListener('click', () => {
+  mappingModal.classList.add('hidden');
+  currentImportFilePath = null;
+});
+
+mappingCommitBtn.addEventListener('click', async () => {
+  const columnMapping = {};
+  mappingRows.querySelectorAll('select').forEach((select) => {
+    columnMapping[select.dataset.colIndex] = select.value; // '' means "ignore this column"
+  });
+
+  const result = await window.api.importCommit(currentImportFilePath, columnMapping);
+  mappingModal.classList.add('hidden');
+  currentImportFilePath = null;
+
   let msg = `Import complete: ${result.added} added, ${result.updated} updated, ${result.skipped} unchanged.`;
   if (result.invalid.length) {
     msg += `\n\n${result.invalid.length} row(s) skipped due to errors:\n` +
       result.invalid.map((r) => `- ${r.policyNumber || '(no policy number)'}: ${r.errors.join('; ')}`).join('\n');
   }
   if (result.unmappedHeaders.length) {
-    msg += `\n\nColumns not recognized (ignored): ${result.unmappedHeaders.join(', ')}`;
+    msg += `\n\nColumns left unmapped (ignored): ${result.unmappedHeaders.join(', ')}`;
   }
   alert(msg);
   await refresh();

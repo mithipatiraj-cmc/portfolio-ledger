@@ -137,6 +137,67 @@ test('classifyForImport: changed field is classified duplicate-changed and names
   assert.deepEqual(result[0].changedFields, ['roi']);
 });
 
+test('parseWorkbook: an explicit columnMapping override maps a differently-named header correctly', () => {
+  // Sheet using different header text than the standard set — mapping is supplied manually.
+  const customHeaders = ['Policy #', 'Type', 'Started', 'Matures', 'Term', 'Bank', 'Branch Name',
+    'Primary Holder', 'Secondary Holder', 'Nominee Name', '', 'Invested', 'Rate', 'Compounding',
+    'Maturity Value', 'Acct No', 'Bank Name'];
+  const rows = [
+    ['FD-777', 'FD', '2024-01-01', '2027-01-01', '3y', 'Axis', 'MG Road', 'Raviraj', '', 'Asha', '',
+      50000, 6.0, 4, 60000, '999', 'Kotak']
+  ];
+  const buffer = buildWorkbookBuffer(customHeaders, rows);
+
+  // Without a mapping, none of these headers auto-match (except maybe 'branch'-ish ones by luck) —
+  // confirm the base case first.
+  const unmapped = parseWorkbook(buffer);
+  assert.ok(unmapped.unmappedHeaders.length > 5, 'most custom headers should be unrecognized without mapping');
+
+  // Now supply an explicit column mapping (by column index) and confirm it parses correctly.
+  const columnMapping = {
+    0: 'policyNumber', 1: 'instrument', 2: 'startDate', 3: 'maturityDate', 4: 'termTotal',
+    5: 'institution', 6: 'branch', 7: 'holder', 8: 'jointHolder', 9: 'nominee',
+    11: 'amountInvested', 12: 'roi', 13: 'compoundingPeriodsPerYear', 14: 'maturityAmount',
+    15: 'destinationAccount', 16: 'destinationBank'
+  };
+  const { rows: parsed, unmappedHeaders } = parseWorkbook(buffer, { columnMapping });
+
+  assert.equal(unmappedHeaders.length, 0);
+  assert.equal(parsed.length, 1);
+  assert.deepEqual(parsed[0].errors, []);
+  assert.equal(parsed[0].data.policyNumber, 'FD-777');
+  assert.equal(parsed[0].data.institution, 'Axis');
+  assert.equal(parsed[0].data.amountInvested, 50000);
+  assert.equal(parsed[0].data.destinationBank, 'Kotak');
+});
+
+test('parseWorkbook: columnMapping can override an auto-detected column too', () => {
+  // "Institution" would normally auto-map to institution — force it to be ignored instead.
+  const rows = [
+    ['FD-001', 'FD', 44927, 45992, '3y', 'HDFC', '', 'R', '', 'S', '', 100000, 6.5, 4, 121000, '', '']
+  ];
+  const buffer = buildWorkbookBuffer(REAL_HEADERS, rows);
+  const { rows: parsed } = parseWorkbook(buffer, { columnMapping: { 5: '' } }); // column 5 = Institution
+  assert.equal(parsed[0].data.institution, undefined);
+  // institution is required, so this row should now be invalid
+  assert.ok(parsed[0].errors.some((e) => e.includes('institution')));
+});
+
+test('getImportPreview: returns headers, auto-mapping, and schema field list for a mapping UI', () => {
+  const { getImportPreview } = require('../src/import/excelImport.js');
+  const buffer = buildWorkbookBuffer(REAL_HEADERS, [row_stub()]);
+  const preview = getImportPreview(buffer);
+  assert.deepEqual(preview.headerRow, REAL_HEADERS);
+  assert.equal(Object.keys(preview.mapping).length, 16);
+  assert.deepEqual(preview.unmapped, []);
+  assert.ok(preview.schemaFields.some((f) => f.value === 'policyNumber'));
+  assert.ok(preview.schemaFields.some((f) => f.value === '')); // "(ignore this column)" option present
+});
+
+function row_stub() {
+  return ['FD-001', 'FD', 44927, 45992, '3y', 'HDFC', '', 'R', '', 'S', '', 100000, 6.5, 4, 121000, '', ''];
+}
+
 test('classifyForImport: invalid rows stay invalid regardless of existing data', () => {
   const parsed = [{ data: { policyNumber: null }, errors: ['Missing required field: policyNumber'] }];
   const result = classifyForImport(parsed, new Map());

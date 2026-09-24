@@ -1,11 +1,11 @@
 'use strict';
 
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-require('dotenv').config();
 const path = require('node:path');
 const fs = require('node:fs');
 const db = require('./db.js');
 const { commitImport } = require('../import/importRunner.js');
+const { getImportPreview } = require('../import/excelImport.js');
 
 let database;
 
@@ -29,11 +29,6 @@ function createWindow() {
 app.whenReady().then(() => {
   database = db.initDb(getDbPath());
 
-  if (process.env.RESET_DB === 'true') {
-    db.recreateDbSchema(database);
-    console.log('Database schema recreated.');
-  }
-
   // --- IPC handlers: the renderer never touches SQLite directly ---
   ipcMain.handle('policies:list', () => db.listPolicies(database));
   ipcMain.handle('policies:add', (_event, policy) => db.addPolicy(database, policy));
@@ -41,14 +36,25 @@ app.whenReady().then(() => {
   ipcMain.handle('policies:delete', (_event, id) => db.deletePolicy(database, id));
   ipcMain.handle('portfolio:summary', (_event, opts) => db.getPortfolioSummary(database, opts));
 
-  ipcMain.handle('import:pickAndCommit', async () => {
+  // --- Excel import, two-step so the renderer can show a mapping UI before committing ---
+  // Step 1: user picks a file; we return its header row + auto-detected mapping.
+  // The renderer builds a mapping screen from this and lets the user adjust it.
+  ipcMain.handle('import:pickAndPreview', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [{ name: 'Excel', extensions: ['xlsx', 'xls'] }]
     });
     if (canceled || filePaths.length === 0) return null;
-    const buffer = fs.readFileSync(filePaths[0]);
-    return commitImport(database, db, buffer);
+    const filePath = filePaths[0];
+    const buffer = fs.readFileSync(filePath);
+    const preview = getImportPreview(buffer);
+    return { filePath, ...preview };
+  });
+
+  // Step 2: user confirms (or adjusts) the mapping; we re-read the same file and commit.
+  ipcMain.handle('import:commitWithMapping', (_event, { filePath, columnMapping }) => {
+    const buffer = fs.readFileSync(filePath);
+    return commitImport(database, db, buffer, { columnMapping });
   });
 
   createWindow();
@@ -62,4 +68,3 @@ app.on('window-all-closed', () => {
   if (database) database.close();
   if (process.platform !== 'darwin') app.quit();
 });
-
