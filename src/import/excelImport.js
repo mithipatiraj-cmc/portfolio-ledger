@@ -1,6 +1,7 @@
 'use strict';
 
 const XLSX = require('xlsx');
+const { toTitleCase } = require('../shared/nameCase.js');
 
 /**
  * Maps Excel column headers (as they appear in the user's sheet) to schema field names.
@@ -48,6 +49,8 @@ const SCHEMA_FIELDS = [
   { value: 'destinationBank', label: 'Destination bank' }
 ];
 const NUMERIC_FIELDS = ['amountInvested', 'roi', 'compoundingPeriodsPerYear', 'maturityAmount'];
+// Stored in Title Case (see db.js), so parse them the same way for re-import comparisons.
+const NAME_FIELDS = ['institution', 'branch', 'holder', 'jointHolder', 'nominee', 'destinationBank'];
 
 function normalizeHeader(h) {
   return String(h ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -124,6 +127,8 @@ function parseWorkbook(buffer, { sheetName, columnMapping } = {}) {
           data[field] = parseExcelDate(raw);
         } else if (NUMERIC_FIELDS.includes(field)) {
           data[field] = parseNumeric(raw);
+        } else if (NAME_FIELDS.includes(field)) {
+          data[field] = raw == null ? null : toTitleCase(raw);
         } else {
           data[field] = raw == null ? null : String(raw).trim();
         }

@@ -1,6 +1,7 @@
 'use strict';
 
 const { DatabaseSync } = require('node:sqlite');
+const { toTitleCase } = require('../shared/nameCase.js');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS institutions (
@@ -60,6 +61,70 @@ function migrate(db) {
   if (policyColumns.includes('received_amount') && !policyColumns.includes('amount_invested')) {
     db.exec('ALTER TABLE policies RENAME COLUMN received_amount TO amount_invested;');
   }
+  normalizeLookupNames(db);
+}
+
+const keepAsIs = (v) => v;
+
+// Lookup tables whose name columns are stored in Title Case, and the policy
+// columns that reference them (re-pointed when case-only duplicates merge).
+const LOOKUP_TABLES = [
+  {
+    table: 'people',
+    columns: { name: toTitleCase },
+    refs: ['holder_id', 'joint_holder_id', 'nominee_id']
+  },
+  {
+    table: 'institutions',
+    columns: { name: toTitleCase, branch: toTitleCase },
+    refs: ['institution_id']
+  },
+  {
+    table: 'destinations',
+    columns: { bank: toTitleCase, account: keepAsIs },
+    refs: ['destination_id']
+  }
+];
+
+/**
+ * Title-case every lookup name, merging rows that differ only by case
+ * (e.g. "RAVIRAJ" and "raviraj") into the oldest one. Idempotent, so it's
+ * safe to run on every startup.
+ */
+function normalizeLookupNames(db) {
+  db.exec('BEGIN');
+  try {
+    for (const { table, columns, refs } of LOOKUP_TABLES) {
+      const cols = Object.keys(columns);
+      const rows = db.prepare(`SELECT id, ${cols.join(', ')} FROM ${table} ORDER BY id`).all();
+      const survivors = new Map(); // normalized key → { id, values }
+
+      // Pass 1: merge duplicates into the first row of each group.
+      for (const row of rows) {
+        const values = cols.map((c) => columns[c](row[c]));
+        const key = JSON.stringify(values);
+        const survivor = survivors.get(key);
+        if (!survivor) {
+          survivors.set(key, { id: row.id, values, changed: cols.some((c, i) => row[c] !== values[i]) });
+          continue;
+        }
+        for (const ref of refs) {
+          db.prepare(`UPDATE policies SET ${ref} = ? WHERE ${ref} = ?`).run(survivor.id, row.id);
+        }
+        db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(row.id);
+      }
+
+      // Pass 2: rename survivors. Every group now has one row, so no UNIQUE clash.
+      const update = db.prepare(`UPDATE ${table} SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`);
+      for (const { id, values, changed } of survivors.values()) {
+        if (changed) update.run(...values, id);
+      }
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 function recreateDbSchema(db) {
@@ -76,8 +141,13 @@ function recreateDbSchema(db) {
   db.exec(SCHEMA);
 }
 
-/** Insert a lookup row if it doesn't already exist (by its UNIQUE constraint), return its id either way. */
+/**
+ * Insert a lookup row if it doesn't already exist (by its UNIQUE constraint), return its id either way.
+ * Names are stored in Title Case, so "union bank" and "Union Bank" resolve to the same row.
+ */
 function upsertInstitution(db, name, branch) {
+  name = toTitleCase(name);
+  branch = toTitleCase(branch);
   if (!name) return null;
   const existing = db
     .prepare('SELECT id FROM institutions WHERE name = ? AND (branch = ? OR (branch IS NULL AND ? IS NULL))')
@@ -88,6 +158,7 @@ function upsertInstitution(db, name, branch) {
 }
 
 function upsertPerson(db, name) {
+  name = toTitleCase(name);
   if (!name) return null;
   const existing = db.prepare('SELECT id FROM people WHERE name = ?').get(name);
   if (existing) return existing.id;
@@ -96,6 +167,7 @@ function upsertPerson(db, name) {
 }
 
 function upsertDestination(db, bank, account) {
+  bank = toTitleCase(bank);
   if (!bank && !account) return null;
   const existing = db.prepare('SELECT id FROM destinations WHERE bank = ? AND account = ?').get(bank, account);
   if (existing) return existing.id;

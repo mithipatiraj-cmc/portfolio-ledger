@@ -188,3 +188,44 @@ test('recreateDbSchema clears all data and leaves a usable empty schema', () => 
   addPolicy(db, { policyNumber: 'FD-002', institution: 'SBI', amountInvested: 5000, maturityDate: '2027-01-01' });
   assert.equal(listPolicies(db).length, 1);
 });
+
+test('addPolicy stores lookup names in Title Case and treats case variants as the same row', () => {
+  const db = freshDb();
+  const base = { institution: 'union bank', branch: 'TELLAPUR', amountInvested: 1000, maturityDate: '2027-01-01' };
+  addPolicy(db, { ...base, policyNumber: 'A', holder: 'RAVIRAJ', nominee: 'madhavi' });
+  addPolicy(db, { ...base, policyNumber: 'B', institution: 'Union Bank', holder: 'raviraj', nominee: 'Madhavi' });
+
+  const [a, b] = listPolicies(db);
+  assert.equal(a.institution, 'Union Bank');
+  assert.equal(a.branch, 'Tellapur');
+  assert.equal(a.holder, 'Raviraj');
+  assert.equal(b.nominee, 'Madhavi');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM people').get().n, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM institutions').get().n, 1);
+});
+
+test('initDb merges existing case-only duplicate names and re-points policies to the survivor', () => {
+  const path = require('node:path');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pl-')), 'dupes.sqlite');
+
+  // Simulate data written before names were normalised.
+  const first = initDb(dbPath);
+  first.exec(`
+    INSERT INTO people (id, name) VALUES (1, 'RAVIRAJ'), (2, 'raviraj'), (3, 'madhavi');
+    INSERT INTO institutions (id, name, branch) VALUES (1, 'Union Bank', 'tellapur'), (2, 'union bank', 'tellapur');
+    INSERT INTO policies (policy_number, holder_id, nominee_id, institution_id) VALUES ('A', 1, 3, 1), ('B', 2, 3, 2);
+  `);
+  first.close();
+
+  const db = initDb(dbPath);
+  assert.deepEqual(db.prepare('SELECT name FROM people ORDER BY id').all().map((r) => r.name), ['Raviraj', 'Madhavi']);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM institutions').get().n, 1);
+  const rows = listPolicies(db);
+  assert.deepEqual(rows.map((r) => [r.policy_number, r.holder, r.institution, r.branch]), [
+    ['A', 'Raviraj', 'Union Bank', 'Tellapur'],
+    ['B', 'Raviraj', 'Union Bank', 'Tellapur']
+  ]);
+  db.close();
+});

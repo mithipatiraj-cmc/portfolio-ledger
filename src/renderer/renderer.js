@@ -24,6 +24,8 @@ const EDITABLE_COLUMNS = [
   { key: 'maturity_date', dbField: 'maturity_date' }
 ];
 
+const UPCOMING_DAYS = 30;
+
 let allPolicies = []; // last full fetch, before any filter is applied
 
 // --- Filter bar setup ---
@@ -36,6 +38,7 @@ for (const opt of window.PolicyFilter.FILTERABLE_FIELDS) {
 
 function applyFilterAndRender() {
   const filtered = window.PolicyFilter.filterPolicies(allPolicies, filterField.value, filterQuery.value);
+  renderSummary(window.PolicyFilter.summarizePolicies(filtered, { upcomingWithinDays: UPCOMING_DAYS }));
   renderTable(filtered);
   filterCount.textContent = filterQuery.value.trim()
     ? `${filtered.length} of ${allPolicies.length} shown`
@@ -51,21 +54,15 @@ clearFilterBtn.addEventListener('click', () => {
 });
 
 async function refresh() {
-  const [policies, summary] = await Promise.all([
-    window.api.listPolicies(),
-    window.api.getPortfolioSummary({ upcomingWithinDays: 30 })
-  ]);
-  allPolicies = policies;
-  renderSummary(summary);
+  allPolicies = await window.api.listPolicies();
   applyFilterAndRender();
 }
 
+// Summary covers only the rows currently shown, so it follows the filter.
 function renderSummary(summary) {
   summaryEl.textContent =
     `${summary.accountCount} accounts · ₹${summary.totalInvested.toLocaleString('en-IN')} total` +
-    (summary.upcomingMaturities.length
-      ? ` · ${summary.upcomingMaturities.length} maturing within 30 days`
-      : '');
+    (summary.upcomingCount ? ` · ${summary.upcomingCount} maturing within ${UPCOMING_DAYS} days` : '');
 }
 
 function renderTable(policies) {

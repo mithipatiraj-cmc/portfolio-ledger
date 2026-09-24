@@ -58,3 +58,21 @@ test('FILTERABLE_FIELDS includes an "all" option plus every joined lookup field'
   assert.ok(values.includes('nominee'));
   assert.ok(values.includes('joint_holder'));
 });
+
+test('summarizePolicies totals only the policies passed in (i.e. the filtered set)', () => {
+  const { summarizePolicies } = require('../src/renderer/filterPolicies.js');
+  const policies = [
+    { amount_invested: 100000, maturity_date: '2026-10-01' },
+    { amount_invested: 50000, maturity_date: '2027-06-01' },
+    { amount_invested: null, maturity_date: '2026-09-01' } // already matured
+  ];
+  const today = new Date('2026-09-24T00:00:00Z');
+
+  assert.deepEqual(summarizePolicies(policies, { today }), {
+    accountCount: 3, totalInvested: 150000, upcomingCount: 1
+  });
+  assert.deepEqual(summarizePolicies(policies.slice(1), { today }), {
+    accountCount: 2, totalInvested: 50000, upcomingCount: 0
+  });
+  assert.deepEqual(summarizePolicies([], { today }), { accountCount: 0, totalInvested: 0, upcomingCount: 0 });
+});
