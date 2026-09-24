@@ -266,3 +266,24 @@ test('initDb merges existing case-only duplicate names and re-points policies to
   ]);
   db.close();
 });
+
+test('addPolicy/updatePolicy enforce maturity date for fixed deposits only', () => {
+  const db = freshDb();
+  assert.throws(() => addPolicy(db, { policyNumber: 'A', instrument: 'F D', institution: 'HDFC', amountInvested: 1 }), /fixed deposits/);
+
+  const nscId = addPolicy(db, { policyNumber: 'B', instrument: 'NSC', institution: 'Post Office', amountInvested: 1 });
+  const fdId = addPolicy(db, { policyNumber: 'C', instrument: 'Fixed Deposit', institution: 'HDFC', amountInvested: 1, maturityDate: '2027-01-01' });
+
+  assert.throws(() => updatePolicy(db, fdId, { maturity_date: null }), /fixed deposits/, 'cannot clear an FD maturity date');
+  assert.throws(() => updatePolicy(db, nscId, { instrument: 'FD' }), /fixed deposits/, 'cannot turn a dateless policy into an FD');
+  assert.equal(updatePolicy(db, nscId, { instrument: 'FD', maturity_date: '2028-01-01' }), true, 'fine when both are set together');
+  assert.equal(updatePolicy(db, fdId, { instrument: 'NSC' }), true);
+  assert.equal(updatePolicy(db, fdId, { maturity_date: null }), true, 'non-FD may have no maturity date');
+});
+
+test('listPolicies sorts policies without a maturity date last', () => {
+  const db = freshDb();
+  addPolicy(db, { policyNumber: 'NO-DATE', instrument: 'NSC', institution: 'Post Office', amountInvested: 1 });
+  addPolicy(db, { policyNumber: 'DATED', instrument: 'FD', institution: 'HDFC', amountInvested: 1, maturityDate: '2027-01-01' });
+  assert.deepEqual(listPolicies(db).map((p) => p.policy_number), ['DATED', 'NO-DATE']);
+});

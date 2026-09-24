@@ -2,6 +2,9 @@
 
 const { DatabaseSync } = require('node:sqlite');
 const { toTitleCase } = require('../shared/nameCase.js');
+const { isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
+
+const FD_MATURITY_ERROR = 'Maturity date is required for fixed deposits.';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS institutions (
@@ -186,6 +189,8 @@ function upsertDestination(db, bank, account) {
  * @returns {number} the new policy's id
  */
 function addPolicy(db, p) {
+  if (isMaturityDateRequired(p.instrument) && isBlank(p.maturityDate)) throw new Error(FD_MATURITY_ERROR);
+
   const institutionId = upsertInstitution(db, p.institution, p.branch);
   const holderId = upsertPerson(db, p.holder);
   const jointHolderId = p.jointHolder ? upsertPerson(db, p.jointHolder) : null;
@@ -233,6 +238,17 @@ function updatePolicy(db, id, fields) {
     }
   }
   if (sets.length === 0) return false;
+
+  // Check the maturity-date rule against the row as it will look after this update.
+  if ('instrument' in fields || 'maturity_date' in fields) {
+    const current = db.prepare('SELECT instrument, maturity_date FROM policies WHERE id = ?').get(id);
+    if (current) {
+      const instrument = 'instrument' in fields ? fields.instrument : current.instrument;
+      const maturityDate = 'maturity_date' in fields ? fields.maturity_date : current.maturity_date;
+      if (isMaturityDateRequired(instrument) && isBlank(maturityDate)) throw new Error(FD_MATURITY_ERROR);
+    }
+  }
+
   values.push(id);
   db.prepare(`UPDATE policies SET ${sets.join(', ')} WHERE id = ?`).run(...values);
   return true;
@@ -271,7 +287,7 @@ function listPolicies(db, { includeDeleted = false } = {}) {
       LEFT JOIN people n ON n.id = p.nominee_id
       LEFT JOIN destinations d ON d.id = p.destination_id
       ${includeDeleted ? '' : 'WHERE p.deleted_at IS NULL'}
-      ORDER BY p.maturity_date ASC`
+      ORDER BY p.maturity_date IS NULL OR p.maturity_date = '', p.maturity_date ASC`
     )
     .all();
 }

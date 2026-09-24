@@ -160,3 +160,19 @@ test('commitImport: sheetName imports from the chosen sheet of a multi-sheet wor
   assert.equal(result.added, 1);
   assert.equal(dbModule.listPolicies(database)[0].policy_number, 'FD-777');
 });
+
+test('commitImport: an FD without maturity date is invalid, a non-FD without one is imported', () => {
+  const database = dbModule.initDb(':memory:');
+  const buffer = buildWorkbookBuffer([
+    row({ policyNumber: 'FD-NODATE', instrument: 'F D', maturityDate: '' }),
+    row({ policyNumber: 'NSC-NODATE', instrument: 'NSC', maturityDate: '' })
+  ]);
+
+  const result = commitImport(database, dbModule, buffer);
+
+  assert.equal(result.added, 1);
+  assert.deepEqual(result.invalid.map((r) => r.policyNumber), ['FD-NODATE']);
+  const [nsc] = dbModule.listPolicies(database);
+  assert.equal(nsc.policy_number, 'NSC-NODATE');
+  assert.equal(nsc.maturity_date, null);
+});

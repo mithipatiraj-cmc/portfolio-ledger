@@ -223,3 +223,14 @@ test('getImportPreview: lists every sheet and previews the requested one', () =>
   assert.deepEqual(getImportPreview(buffer, { sheetName: 'Empty' }).headerRow, []);
   assert.throws(() => getImportPreview(buffer, { sheetName: 'Nope' }), /not found/);
 });
+
+test('validateRow: maturity date is required for fixed deposits only', () => {
+  const { validateRow } = require('../src/import/excelImport.js');
+  const base = { policyNumber: 'X-1', institution: 'HDFC', amountInvested: 1000, maturityDate: null };
+
+  assert.ok(validateRow({ ...base, instrument: 'F D' }).some((e) => e.includes('maturityDate')));
+  assert.ok(validateRow({ ...base, instrument: 'Fixed Deposit' }).some((e) => e.includes('maturityDate')));
+  assert.deepEqual(validateRow({ ...base, instrument: 'NSC' }), []);
+  assert.deepEqual(validateRow({ ...base, instrument: null }), []);
+  assert.deepEqual(validateRow({ ...base, instrument: 'FD', maturityDate: '2027-01-01' }), []);
+});

@@ -118,9 +118,20 @@ async function onCellEdit(id, col, td) {
   if (col.numeric) {
     const parsed = Number(value);
     value = Number.isFinite(parsed) ? parsed : null;
+  } else if (value === '') {
+    value = null;
   }
-  await window.api.updatePolicy(id, { [col.dbField]: value });
+  try {
+    await window.api.updatePolicy(id, { [col.dbField]: value });
+  } catch (err) {
+    alert(ipcErrorMessage(err)); // refresh below puts the previous value back
+  }
   await refresh();
+}
+
+/** Electron wraps main-process errors as "Error invoking remote method '…': Error: <msg>" — keep just <msg>. */
+function ipcErrorMessage(err) {
+  return String(err?.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 }
 
 async function onDelete(id) {

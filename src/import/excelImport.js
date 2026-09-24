@@ -2,6 +2,7 @@
 
 const XLSX = require('xlsx');
 const { toTitleCase } = require('../shared/nameCase.js');
+const { isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
 
 /**
  * Maps Excel column headers (as they appear in the user's sheet) to schema field names.
@@ -26,7 +27,8 @@ const HEADER_TO_FIELD = {
   'proceeds directed to bank': 'destinationBank'
 };
 
-const REQUIRED_FIELDS = ['policyNumber', 'institution', 'amountInvested', 'maturityDate'];
+// maturityDate is conditionally required (fixed deposits only) — see validateRow.
+const REQUIRED_FIELDS = ['policyNumber', 'institution', 'amountInvested'];
 
 /** Options for the import mapping UI's per-column dropdown. '' = ignore the column. */
 const SCHEMA_FIELDS = [
@@ -197,8 +199,9 @@ function validateRow(data) {
       errors.push(`Missing required field: ${field}`);
     }
   }
-  if (data.maturityDate === null && data.maturityDate !== undefined) {
-    // Distinguish "missing" (already caught above) from "present but unparseable"
+  // An unparseable date also parses to null, so it's reported here as missing too.
+  if (isMaturityDateRequired(data.instrument) && isBlank(data.maturityDate)) {
+    errors.push('Missing required field: maturityDate (required for fixed deposits)');
   }
   if (data.startDate !== undefined && data.startDate === null) {
     // startDate isn't required, so a null here (given raw input existed) would've
