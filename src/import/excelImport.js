@@ -26,6 +26,27 @@ const HEADER_TO_FIELD = {
 };
 
 const REQUIRED_FIELDS = ['policyNumber', 'institution', 'amountInvested', 'maturityDate'];
+
+/** Options for the import mapping UI's per-column dropdown. '' = ignore the column. */
+const SCHEMA_FIELDS = [
+  { value: '', label: '(ignore this column)' },
+  { value: 'policyNumber', label: 'Policy No' },
+  { value: 'instrument', label: 'Instrument' },
+  { value: 'startDate', label: 'Start date' },
+  { value: 'maturityDate', label: 'Maturity date' },
+  { value: 'termTotal', label: 'Total term' },
+  { value: 'institution', label: 'Institution' },
+  { value: 'branch', label: 'Branch' },
+  { value: 'holder', label: 'Holder' },
+  { value: 'jointHolder', label: 'Joint holder' },
+  { value: 'nominee', label: 'Nominee' },
+  { value: 'amountInvested', label: 'Amount Invested' },
+  { value: 'roi', label: 'ROI %' },
+  { value: 'compoundingPeriodsPerYear', label: 'Compounding periods per year' },
+  { value: 'maturityAmount', label: 'Maturity amount' },
+  { value: 'destinationAccount', label: 'Destination account' },
+  { value: 'destinationBank', label: 'Destination bank' }
+];
 const NUMERIC_FIELDS = ['amountInvested', 'roi', 'compoundingPeriodsPerYear', 'maturityAmount'];
 
 function normalizeHeader(h) {
@@ -79,18 +100,19 @@ function parseNumeric(value) {
  * dates/numbers), errors is a list of human-readable problems (empty = valid).
  * Invalid rows are still returned (not silently dropped) so the UI can show
  * and let the user fix them inline, per spec §2 step 3.
+ *
+ * columnMapping ({colIndex: field}) overrides the auto-detected mapping per
+ * column; a field of '' means "ignore this column". Columns it doesn't
+ * mention keep their auto-detected mapping.
  */
-function parseWorkbook(buffer, { sheetName } = {}) {
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false });
-  const name = sheetName || workbook.SheetNames[0];
-  const sheet = workbook.Sheets[name];
-  if (!sheet) throw new Error(`Sheet "${name}" not found in workbook`);
-
-  const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+function parseWorkbook(buffer, { sheetName, columnMapping } = {}) {
+  const grid = readGrid(buffer, sheetName);
   if (grid.length === 0) return { rows: [], unmappedHeaders: [] };
 
   const [headerRow, ...dataRows] = grid;
-  const { mapping, unmapped } = autoMapHeaders(headerRow);
+  const { mapping, unmapped } = columnMapping
+    ? applyColumnMapping(headerRow, columnMapping)
+    : autoMapHeaders(headerRow);
 
   const rows = dataRows
     .filter((r) => r.some((cell) => cell !== null && cell !== ''))
@@ -110,6 +132,42 @@ function parseWorkbook(buffer, { sheetName } = {}) {
     });
 
   return { rows, unmappedHeaders: unmapped };
+}
+
+function readGrid(buffer, sheetName) {
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+  const name = sheetName || workbook.SheetNames[0];
+  const sheet = workbook.Sheets[name];
+  if (!sheet) throw new Error(`Sheet "${name}" not found in workbook`);
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+}
+
+/**
+ * Merge a manual columnMapping over the auto-detected one. Anything the user
+ * explicitly set to '' is treated as deliberately ignored, not "unmapped".
+ */
+function applyColumnMapping(headerRow, columnMapping) {
+  const validFields = new Set(SCHEMA_FIELDS.map((f) => f.value));
+  const { mapping } = autoMapHeaders(headerRow);
+  for (const [colIndex, field] of Object.entries(columnMapping)) {
+    if (!validFields.has(field)) throw new Error(`Unknown field in column mapping: ${field}`);
+    if (field) mapping[colIndex] = field;
+    else delete mapping[colIndex];
+  }
+  const unmapped = headerRow.filter(
+    (raw, i) => normalizeHeader(raw) && mapping[i] === undefined && !(i in columnMapping)
+  );
+  return { mapping, unmapped };
+}
+
+/**
+ * First step of the import wizard: the header row plus the auto-detected
+ * mapping, so the UI can let the user confirm or correct it before committing.
+ */
+function getImportPreview(buffer, { sheetName } = {}) {
+  const [headerRow = []] = readGrid(buffer, sheetName);
+  const { mapping, unmapped } = autoMapHeaders(headerRow);
+  return { headerRow, mapping, unmapped, schemaFields: SCHEMA_FIELDS };
 }
 
 function validateRow(data) {
@@ -161,7 +219,9 @@ function classifyForImport(parsedRows, existingByPolicyNumber) {
 module.exports = {
   HEADER_TO_FIELD,
   REQUIRED_FIELDS,
+  SCHEMA_FIELDS,
   autoMapHeaders,
+  getImportPreview,
   parseExcelDate,
   parseNumeric,
   parseWorkbook,

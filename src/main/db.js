@@ -50,7 +50,16 @@ function initDb(dbPath) {
   const db = new DatabaseSync(dbPath);
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+/** Bring databases created by older versions up to the current SCHEMA, keeping their data. */
+function migrate(db) {
+  const policyColumns = db.prepare('PRAGMA table_info(policies)').all().map((c) => c.name);
+  if (policyColumns.includes('received_amount') && !policyColumns.includes('amount_invested')) {
+    db.exec('ALTER TABLE policies RENAME COLUMN received_amount TO amount_invested;');
+  }
 }
 
 function recreateDbSchema(db) {

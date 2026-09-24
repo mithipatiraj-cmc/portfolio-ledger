@@ -9,7 +9,7 @@ const { commitImport } = require('../src/import/importRunner.js');
 const HEADERS = [
   'Policy No', 'Instrument', 'Date of taking the policy', 'Maturity Date', 'Total Term',
   'Institution', 'Branch', 'Holder', 'Joint Holder', 'Nominee', '',
-  'Received amount', 'ROI', 'Compounding periods per year', 'Mat Amount',
+  'Amount', 'ROI', 'Compounding periods per year', 'Mat Amount',
   'Expected', 'Proceeds directed to bank'
 ];
 

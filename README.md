@@ -38,14 +38,14 @@ at your OS's standard per-app data folder:
 Click **"Import from Excel"** in the app and pick your `.xlsx` file. Expected
 columns (case-insensitive, any order): Policy No, Instrument, Date of taking
 the policy, Maturity Date, Total Term, Institution, Branch, Holder, Joint
-Holder, Nominee, Received amount, ROI, Compounding periods per year, Mat
+Holder, Nominee, Amount, ROI, Compounding periods per year, Mat
 Amount, Expected (destination account), Proceeds directed to bank
 (destination bank).
 
 Re-running the import later is safe: unchanged rows are skipped, changed
 rows update the existing policy (matched by Policy No), and new rows are
-added. Rows missing a required field (Policy No, Institution, Received
-amount, Maturity Date) are reported back, not silently dropped.
+added. Rows missing a required field (Policy No, Institution, Amount,
+Maturity Date) are reported back, not silently dropped.
 
 ## Package as a desktop app (clickable installer)
 

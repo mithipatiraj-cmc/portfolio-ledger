@@ -16,6 +16,12 @@
       <button id="addRowBtn">+ Add policy</button>
       <button id="importBtn">Import from Excel</button>
     </div>
+    <div class="filter-bar">
+      <select id="filterField"></select>
+      <input id="filterQuery" type="search" placeholder="Filter…">
+      <button id="clearFilterBtn">Clear</button>
+      <span id="filterCount" class="filter-count"></span>
+    </div>
     <table id="policyTable">
       <thead>
         <tr>
@@ -24,7 +30,7 @@
           <th>Institution</th>
           <th>Holder</th>
           <th>Nominee</th>
-          <th>Received Amount</th>
+          <th>Amount Invested</th>
           <th>ROI %</th>
           <th>Maturity Date</th>
           <th></th>
@@ -34,6 +40,19 @@
     </table>
   </main>
 
+  <div id="mappingModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Map Excel columns</h2>
+      <p class="modal-sub">Check how each column in your sheet maps to a field. Columns set to "ignore" are skipped.</p>
+      <div id="mappingRows" class="mapping-rows"></div>
+      <div class="modal-actions">
+        <button id="mappingCancelBtn">Cancel</button>
+        <button id="mappingCommitBtn">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="filterPolicies.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

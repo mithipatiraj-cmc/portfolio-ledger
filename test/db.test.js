@@ -154,3 +154,21 @@ test('upsertInstitution treats null branch consistently', () => {
   const id2 = upsertInstitution(db, 'SBI', null);
   assert.equal(id1, id2, 'same name with null branch should resolve to the same row');
 });
+
+test('initDb migrates an old database whose policies table still has received_amount', () => {
+  const path = require('node:path');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const { DatabaseSync } = require('node:sqlite');
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pl-')), 'old.sqlite');
+
+  const old = new DatabaseSync(dbPath);
+  old.exec('CREATE TABLE policies (id INTEGER PRIMARY KEY, policy_number TEXT UNIQUE, received_amount REAL);');
+  old.exec("INSERT INTO policies (policy_number, received_amount) VALUES ('FD-OLD', 50000);");
+  old.close();
+
+  const db = initDb(dbPath);
+  const row = db.prepare('SELECT amount_invested FROM policies WHERE policy_number = ?').get('FD-OLD');
+  assert.equal(row.amount_invested, 50000);
+  db.close();
+});
