@@ -14,5 +14,9 @@ contextBridge.exposeInMainWorld('api', {
   importCommit: (filePath, sheetName, columnMapping) =>
     ipcRenderer.invoke('import:commitWithMapping', { filePath, sheetName, columnMapping }),
   backupDb: () => ipcRenderer.invoke('db:backup'),
-  restoreDb: () => ipcRenderer.invoke('db:restore')
+  restoreDb: () => ipcRenderer.invoke('db:restore'),
+  getReminderSettings: () => ipcRenderer.invoke('reminders:get'),
+  saveReminderSettings: (input) => ipcRenderer.invoke('reminders:save', input),
+  sendTestReminder: (input) => ipcRenderer.invoke('reminders:test', input),
+  checkRemindersNow: () => ipcRenderer.invoke('reminders:checkNow')
 });

@@ -12,7 +12,8 @@
     "test": "node --test",
     "dist:linux": "electron-builder --linux AppImage",
     "dist:mac": "electron-builder --mac dmg",
-    "dist:win": "electron-builder --win nsis"
+    "dist:win": "electron-builder --win nsis",
+    "sample": "node scripts/generate-sample-excel.js"
   },
   "build": {
     "appId": "com.portfolioledger.app",
@@ -48,6 +49,7 @@
   },
   "dependencies": {
     "dotenv": "^18.0.3",
+    "nodemailer": "^10.0.10",
     "xlsx": "^0.18.5"
   }
 }

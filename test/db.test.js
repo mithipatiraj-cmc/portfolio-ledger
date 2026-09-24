@@ -18,13 +18,13 @@ function freshDb() {
   return initDb(':memory:');
 }
 
-test('schema creates all four tables', () => {
+test('schema creates the data, settings and reminder-log tables', () => {
   const db = freshDb();
   const tables = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     .all()
     .map((r) => r.name);
-  assert.deepEqual(tables, ['destinations', 'institutions', 'people', 'policies']);
+  assert.deepEqual(tables, ['destinations', 'institutions', 'people', 'policies', 'reminder_log', 'settings']);
 });
 
 test('addPolicy resolves lookups and round-trips through listPolicies', () => {
@@ -327,4 +327,32 @@ test('inspectBackup rejects files that are not Portfolio Ledger databases', () =
   const r2 = inspectBackup(otherDb);
   assert.equal(r2.ok, false);
   assert.match(r2.error, /missing tables/);
+});
+
+test('settings round-trip as JSON and survive recreateDbSchema', () => {
+  const { getSetting, setSetting } = require('../src/main/db.js');
+  const db = freshDb();
+  assert.equal(getSetting(db, 'reminders'), null);
+  assert.deepEqual(getSetting(db, 'reminders', { enabled: false }), { enabled: false });
+
+  setSetting(db, 'reminders', { enabled: true, daysBefore: [30, 7] });
+  setSetting(db, 'reminders', { enabled: true, daysBefore: [7] }); // upsert
+  assert.deepEqual(getSetting(db, 'reminders'), { enabled: true, daysBefore: [7] });
+
+  recreateDbSchema(db);
+  assert.deepEqual(getSetting(db, 'reminders'), { enabled: true, daysBefore: [7] }, 'preferences are not data');
+});
+
+test('reminder log records sent reminders once and is cleared by recreateDbSchema', () => {
+  const { listSentReminders, recordRemindersSent } = require('../src/main/db.js');
+  const db = freshDb();
+  const id = addPolicy(db, { policyNumber: 'FD-1', institution: 'HDFC', amountInvested: 1, maturityDate: '2026-10-01' });
+
+  const entries = [{ policyId: id, maturityDate: '2026-10-01', daysBefore: 7 }, { policyId: id, maturityDate: '2026-10-01', daysBefore: 30 }];
+  recordRemindersSent(db, entries);
+  recordRemindersSent(db, entries); // duplicates ignored
+  assert.deepEqual([...listSentReminders(db)].sort(), [`${id}|2026-10-01|30`, `${id}|2026-10-01|7`]);
+
+  recreateDbSchema(db);
+  assert.equal(listSentReminders(db).size, 0);
 });

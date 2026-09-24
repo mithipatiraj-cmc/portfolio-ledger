@@ -45,6 +45,22 @@ CREATE TABLE IF NOT EXISTS policies (
   destination_id INTEGER REFERENCES destinations(id),
   deleted_at TEXT -- soft delete: set when the user deletes, NULL while active
 );
+
+-- User preferences (e.g. email reminders), one JSON value per key.
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- Which expiry reminders have gone out, so each is sent once. Keyed on the
+-- maturity date too, so a renewed policy (new date) gets reminded again.
+CREATE TABLE IF NOT EXISTS reminder_log (
+  policy_id INTEGER NOT NULL REFERENCES policies(id) ON DELETE CASCADE,
+  maturity_date TEXT NOT NULL,
+  days_before INTEGER NOT NULL,
+  sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (policy_id, maturity_date, days_before)
+);
 `;
 
 /**
@@ -171,7 +187,9 @@ function inspectBackup(filePath) {
 function recreateDbSchema(db) {
   db.exec('PRAGMA foreign_keys = OFF;');
 
+  // Settings (preferences) survive a reset; the reminder log refers to policy ids, so it goes.
   db.exec(`
+    DROP TABLE IF EXISTS reminder_log;
     DROP TABLE IF EXISTS policies;
     DROP TABLE IF EXISTS institutions;
     DROP TABLE IF EXISTS people;
@@ -374,6 +392,40 @@ function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
   };
 }
 
+/** Stored preference for key (parsed JSON), or fallback when unset. */
+function getSetting(db, key, fallback = null) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? JSON.parse(row.value) : fallback;
+}
+
+function setSetting(db, key, value) {
+  db.prepare(
+    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  ).run(key, JSON.stringify(value));
+}
+
+/** Set of "policyId|maturityDate|daysBefore" keys for reminders already sent. */
+function listSentReminders(db) {
+  return new Set(
+    db.prepare('SELECT policy_id, maturity_date, days_before FROM reminder_log').all()
+      .map((r) => `${r.policy_id}|${r.maturity_date}|${r.days_before}`)
+  );
+}
+
+function recordRemindersSent(db, entries) {
+  const insert = db.prepare(
+    'INSERT OR IGNORE INTO reminder_log (policy_id, maturity_date, days_before) VALUES (?, ?, ?)'
+  );
+  db.exec('BEGIN');
+  try {
+    for (const e of entries) insert.run(e.policyId, e.maturityDate, e.daysBefore);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 module.exports = {
   initDb,
   backupTo,
@@ -387,5 +439,9 @@ module.exports = {
   deletePolicy,
   restorePolicy,
   listPolicies,
-  getPortfolioSummary
+  getPortfolioSummary,
+  getSetting,
+  setSetting,
+  listSentReminders,
+  recordRemindersSent
 };

@@ -47,6 +47,29 @@ rows update the existing policy (matched by Policy No), and new rows are
 added. Rows missing a required field (Policy No, Institution, Amount,
 Maturity Date) are reported back, not silently dropped.
 
+## Email reminders before maturity (optional)
+
+Off by default. Open **Reminders…** in the app, tick **Send email reminders**,
+and fill in:
+
+- **Send reminders to**: any address.
+- **Send from (Gmail)** and a **Gmail app password**: create one at
+  myaccount.google.com/apppasswords (needs 2-Step Verification on your Google
+  account). It's stored encrypted with macOS Keychain or Windows DPAPI.
+- **Days before maturity**, e.g. `30, 7, 1`: one email per threshold, bundled
+  into a single digest when several policies are due.
+
+Use **Send test email** to confirm the setup. Saving registers a daily
+background check (macOS launchd agent / Windows Task Scheduler task) that
+runs the app headless with `--check-reminders`, so reminders go out even when
+the app is closed; the app also checks on launch and hourly while open. Each
+reminder is sent once per policy and threshold. Turning reminders off removes
+the background job. Activity is logged to `reminders.log` in the app's data
+folder.
+
+In development the background job points at this repo's Electron binary, so
+it stops working if the repo moves; re-save the settings to update it.
+
 ## Package as a desktop app (clickable installer)
 
 ```bash

@@ -16,6 +16,7 @@
   <header>
     <h1>Portfolio Ledger</h1>
     <div class="header-actions">
+      <button id="remindersBtn" class="secondary">Reminders…</button>
       <button id="backupBtn" class="secondary">Back up</button>
       <button id="restoreBtn" class="secondary">Restore…</button>
       <label class="theme-picker">Theme
@@ -89,6 +90,58 @@
         <button id="mappingCommitBtn">Import</button>
       </div>
     </div>
+  </div>
+
+  <div id="remindersModal" class="modal-overlay hidden">
+    <form id="remindersForm" class="modal" novalidate>
+      <h2>Email reminders</h2>
+      <p class="modal-sub">
+        Get an email before a policy matures. Off unless you turn it on. Reminders include the
+        policy number, institution, holder and amounts, sent through your own Gmail account.
+      </p>
+
+      <label class="check-row"><input id="remEnabled" type="checkbox"> Send email reminders</label>
+
+      <div class="form-grid">
+        <label for="remRecipient">Send reminders to</label>
+        <input id="remRecipient" type="email" placeholder="you@example.com" autocomplete="off">
+
+        <label for="remGmailUser">Send from (Gmail)</label>
+        <input id="remGmailUser" type="email" placeholder="yourname@gmail.com" autocomplete="off">
+
+        <label for="remPassword">Gmail app password</label>
+        <div>
+          <input id="remPassword" type="password" autocomplete="off">
+          <div class="field-help">
+            Not your normal password: create one at myaccount.google.com/apppasswords
+            (needs 2-Step Verification). Stored encrypted by your system's keychain.
+          </div>
+        </div>
+
+        <label for="remDays">Days before maturity</label>
+        <div>
+          <input id="remDays" type="text" placeholder="30, 7, 1">
+          <div class="field-help">One email per threshold, e.g. 30, 7 and 1 day before.</div>
+        </div>
+
+        <label for="remHour">Daily check at</label>
+        <div>
+          <select id="remHour"></select>
+          <div class="field-help">Runs even when the app is closed (macOS and Windows).</div>
+        </div>
+      </div>
+
+      <div id="remStatus" class="rem-status"></div>
+      <div id="remMessage" class="rem-message" role="status" hidden></div>
+
+      <div class="modal-actions">
+        <button type="button" id="remTestBtn" class="secondary">Send test email</button>
+        <button type="button" id="remCheckBtn" class="secondary">Check now</button>
+        <span class="spacer"></span>
+        <button type="button" id="remCancelBtn" class="secondary">Cancel</button>
+        <button type="submit" id="remSaveBtn">Save</button>
+      </div>
+    </form>
   </div>
 
   <script src="filterPolicies.js"></script>

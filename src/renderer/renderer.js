@@ -421,6 +421,122 @@ themeSelect.addEventListener('change', () => {
   } catch {}
 });
 
+// --- Email reminders dialog ---
+const remindersBtn = document.getElementById('remindersBtn');
+const remindersModal = document.getElementById('remindersModal');
+const remindersForm = document.getElementById('remindersForm');
+const remEnabled = document.getElementById('remEnabled');
+const remRecipient = document.getElementById('remRecipient');
+const remGmailUser = document.getElementById('remGmailUser');
+const remPassword = document.getElementById('remPassword');
+const remDays = document.getElementById('remDays');
+const remHour = document.getElementById('remHour');
+const remStatus = document.getElementById('remStatus');
+const remMessage = document.getElementById('remMessage');
+const remFields = remindersForm.querySelector('.form-grid');
+
+for (let h = 0; h < 24; h++) {
+  const label = `${String(h).padStart(2, '0')}:00`;
+  remHour.appendChild(Object.assign(document.createElement('option'), { value: String(h), textContent: label }));
+}
+
+function reminderFormInput() {
+  return {
+    enabled: remEnabled.checked,
+    recipient: remRecipient.value,
+    gmailUser: remGmailUser.value,
+    appPassword: remPassword.value,
+    daysBefore: remDays.value,
+    checkHour: Number(remHour.value)
+  };
+}
+
+function showReminderMessage(text, isError = false) {
+  remMessage.textContent = text;
+  remMessage.classList.toggle('error', isError);
+  remMessage.hidden = !text;
+}
+
+function renderReminderSettings({ prefs, lastCheck, schedule }) {
+  remEnabled.checked = prefs.enabled;
+  remRecipient.value = prefs.recipient;
+  remGmailUser.value = prefs.gmailUser;
+  remPassword.value = '';
+  remPassword.placeholder = prefs.hasPassword ? 'Saved — leave blank to keep' : '';
+  remDays.value = prefs.daysBefore.join(', ');
+  remHour.value = String(prefs.checkHour);
+  remFields.classList.toggle('disabled', !prefs.enabled);
+  renderReminderStatus({ prefs, lastCheck, schedule });
+}
+
+function renderReminderStatus({ prefs, lastCheck, schedule }) {
+  const lines = [];
+  if (prefs.enabled && schedule) lines.push(`Background check: ${schedule.description}.`);
+  if (lastCheck) {
+    const when = new Date(lastCheck.at).toLocaleString();
+    lines.push(lastCheck.ok
+      ? `Last check ${when}: ${lastCheck.sent ? `emailed ${lastCheck.sent} reminder(s)` : 'nothing due'}.`
+      : `Last check ${when} failed: ${lastCheck.error}`);
+  }
+  remStatus.textContent = lines.join(' ');
+}
+
+remEnabled.addEventListener('change', () => remFields.classList.toggle('disabled', !remEnabled.checked));
+
+remindersBtn.addEventListener('click', async () => {
+  showReminderMessage('');
+  renderReminderSettings(await window.api.getReminderSettings());
+  remindersModal.classList.remove('hidden');
+});
+
+document.getElementById('remCancelBtn').addEventListener('click', () => remindersModal.classList.add('hidden'));
+
+/** Run an action with the dialog's buttons disabled, showing its outcome inline. */
+async function reminderAction(button, busyText, action) {
+  const buttons = remindersForm.querySelectorAll('button');
+  const label = button.textContent;
+  buttons.forEach((b) => { b.disabled = true; });
+  button.textContent = busyText;
+  showReminderMessage('');
+  try {
+    await action();
+  } catch (err) {
+    showReminderMessage(ipcErrorMessage(err), true);
+  } finally {
+    buttons.forEach((b) => { b.disabled = false; });
+    button.textContent = label;
+  }
+}
+
+remindersForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  reminderAction(document.getElementById('remSaveBtn'), 'Saving…', async () => {
+    renderReminderSettings(await window.api.saveReminderSettings(reminderFormInput()));
+    remindersModal.classList.add('hidden');
+  });
+});
+
+document.getElementById('remTestBtn').addEventListener('click', (e) => {
+  reminderAction(e.currentTarget, 'Sending…', async () => {
+    await window.api.sendTestReminder(reminderFormInput());
+    showReminderMessage(`Test email sent to ${remRecipient.value.trim()}. Check your inbox (and spam).`);
+  });
+});
+
+document.getElementById('remCheckBtn').addEventListener('click', (e) => {
+  reminderAction(e.currentTarget, 'Checking…', async () => {
+    const result = await window.api.checkRemindersNow();
+    if (!result.ran) {
+      showReminderMessage('Reminders are off. Turn them on and save first.', true);
+    } else if (!result.ok) {
+      showReminderMessage(`Check failed: ${result.error}`, true);
+    } else {
+      showReminderMessage(result.sent ? `Emailed ${result.sent} reminder(s).` : 'Nothing due right now.');
+    }
+    renderReminderStatus(await window.api.getReminderSettings()); // keep any unsaved form edits
+  });
+});
+
 // --- Excel import ---
 importBtn.addEventListener('click', async () => {
   const preview = await window.api.importPreview();

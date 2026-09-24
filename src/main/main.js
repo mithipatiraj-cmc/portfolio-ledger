@@ -6,11 +6,18 @@ const fs = require('node:fs');
 const db = require('./db.js');
 const { commitImport } = require('../import/importRunner.js');
 const { getImportPreview } = require('../import/excelImport.js');
+const { createReminderService } = require('./reminderService.js');
+const { CHECK_FLAG } = require('./scheduler.js');
 
 // Load .env from the project root regardless of the directory the app was launched from.
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 let database;
+let reminders;
+
+// Started by the daily OS job (see scheduler.js): check and email reminders, no window.
+const isReminderCheck = process.argv.includes(CHECK_FLAG);
+const HOUR_MS = 60 * 60 * 1000;
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'portfolio-ledger.sqlite');
@@ -51,8 +58,50 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 }
 
-app.whenReady().then(() => {
+/** How the OS job relaunches this app headless: packaged app vs `electron .` in development. */
+function reminderLaunchCommand() {
+  return process.defaultApp
+    ? { command: process.execPath, args: [app.getAppPath(), CHECK_FLAG] }
+    : { command: process.execPath, args: [CHECK_FLAG] };
+}
+
+// One instance at a time. If the daily job fires while the app is open, the
+// open app runs the check instead; a second normal launch focuses the window.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    if (argv.includes(CHECK_FLAG)) {
+      reminders?.runCheck('scheduled (app open)');
+      return;
+    }
+    const [win] = BrowserWindow.getAllWindows();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+  if (isReminderCheck) app.dock?.hide();
+  app.whenReady().then(start);
+}
+
+async function start() {
   database = db.initDb(getDbPath());
+  reminders = createReminderService({
+    getDatabase: () => database,
+    userDataPath: app.getPath('userData'),
+    launchCommand: reminderLaunchCommand
+  });
+
+  if (isReminderCheck) {
+    try {
+      await reminders.runCheck('scheduled');
+    } finally {
+      app.quit();
+    }
+    return; // headless: no reset, no window, no IPC
+  }
+
   resetDbIfRequested(getDbPath());
 
   // --- IPC handlers: the renderer never touches SQLite directly ---
@@ -145,12 +194,22 @@ app.whenReady().then(() => {
     return { ok: true, policyCount: backup.policyCount, safetyPath };
   });
 
+  // --- Email reminders (optional, off until enabled in the Reminders dialog) ---
+  ipcMain.handle('reminders:get', () => reminders.getSettingsView());
+  ipcMain.handle('reminders:save', (_event, input) => reminders.saveSettings(input));
+  ipcMain.handle('reminders:test', (_event, input) => reminders.sendTest(input));
+  ipcMain.handle('reminders:checkNow', () => reminders.runCheck('manual'));
+
   createWindow();
+
+  // Catch anything that came due while the app was closed, then keep checking hourly.
+  reminders.runCheck('startup');
+  setInterval(() => reminders.runCheck('hourly'), HOUR_MS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
+}
 
 // On macOS the app stays running with no windows and can reopen one from the
 // Dock, so the database is closed on quit rather than when the last window closes.
