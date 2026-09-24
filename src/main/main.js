@@ -7,10 +7,30 @@ const db = require('./db.js');
 const { commitImport } = require('../import/importRunner.js');
 const { getImportPreview } = require('../import/excelImport.js');
 
+// Load .env from the project root regardless of the directory the app was launched from.
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
+
 let database;
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'portfolio-ledger.sqlite');
+}
+
+/**
+ * When DB_RESET=true (in .env), drop and recreate every table on startup.
+ * The existing database file is copied to a timestamped backup first, so a
+ * forgotten flag can't silently destroy data.
+ */
+function resetDbIfRequested(dbPath) {
+  if (process.env.DB_RESET !== 'true') return;
+  if (fs.existsSync(dbPath)) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = dbPath.replace(/\.sqlite$/, `.backup-${stamp}.sqlite`);
+    fs.copyFileSync(dbPath, backupPath);
+    console.log(`DB_RESET: backed up existing database to ${backupPath}`);
+  }
+  db.recreateDbSchema(database);
+  console.log('DB_RESET: database schema recreated (all data cleared).');
 }
 
 function createWindow() {
@@ -28,6 +48,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   database = db.initDb(getDbPath());
+  resetDbIfRequested(getDbPath());
 
   // --- IPC handlers: the renderer never touches SQLite directly ---
   ipcMain.handle('policies:list', () => db.listPolicies(database));

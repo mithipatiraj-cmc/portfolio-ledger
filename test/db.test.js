@@ -9,7 +9,8 @@ const {
   deletePolicy,
   listPolicies,
   getPortfolioSummary,
-  upsertInstitution
+  upsertInstitution,
+  recreateDbSchema
 } = require('../src/main/db.js');
 
 function freshDb() {
@@ -171,4 +172,19 @@ test('initDb migrates an old database whose policies table still has received_am
   const row = db.prepare('SELECT amount_invested FROM policies WHERE policy_number = ?').get('FD-OLD');
   assert.equal(row.amount_invested, 50000);
   db.close();
+});
+
+test('recreateDbSchema clears all data and leaves a usable empty schema', () => {
+  const db = freshDb();
+  addPolicy(db, {
+    policyNumber: 'FD-001', institution: 'HDFC', holder: 'Raviraj',
+    amountInvested: 100000, roi: 6.5, maturityDate: '2027-01-01'
+  });
+
+  recreateDbSchema(db);
+
+  assert.equal(listPolicies(db).length, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM institutions').get().n, 0);
+  addPolicy(db, { policyNumber: 'FD-002', institution: 'SBI', amountInvested: 5000, maturityDate: '2027-01-01' });
+  assert.equal(listPolicies(db).length, 1);
 });
