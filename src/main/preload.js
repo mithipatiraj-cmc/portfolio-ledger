@@ -12,5 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   importPreview: () => ipcRenderer.invoke('import:pickAndPreview'),
   importPreviewSheet: (filePath, sheetName) => ipcRenderer.invoke('import:previewSheet', { filePath, sheetName }),
   importCommit: (filePath, sheetName, columnMapping) =>
-    ipcRenderer.invoke('import:commitWithMapping', { filePath, sheetName, columnMapping })
+    ipcRenderer.invoke('import:commitWithMapping', { filePath, sheetName, columnMapping }),
+  backupDb: () => ipcRenderer.invoke('db:backup'),
+  restoreDb: () => ipcRenderer.invoke('db:restore')
 });

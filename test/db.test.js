@@ -287,3 +287,44 @@ test('listPolicies sorts policies without a maturity date last', () => {
   addPolicy(db, { policyNumber: 'DATED', instrument: 'FD', institution: 'HDFC', amountInvested: 1, maturityDate: '2027-01-01' });
   assert.deepEqual(listPolicies(db).map((p) => p.policy_number), ['DATED', 'NO-DATE']);
 });
+
+test('backupTo writes a restorable copy that inspectBackup accepts', () => {
+  const path = require('node:path');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const { backupTo, inspectBackup } = require('../src/main/db.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pl-'));
+  const dest = path.join(dir, 'backup.sqlite');
+
+  const db = freshDb();
+  addPolicy(db, { policyNumber: 'FD-001', institution: 'HDFC', amountInvested: 1000, maturityDate: '2027-01-01' });
+  fs.writeFileSync(dest, 'stale file that must be replaced');
+  backupTo(db, dest);
+
+  assert.deepEqual(inspectBackup(dest), { ok: true, policyCount: 1 });
+  const reopened = initDb(dest);
+  assert.equal(listPolicies(reopened)[0].policy_number, 'FD-001');
+  reopened.close();
+});
+
+test('inspectBackup rejects files that are not Portfolio Ledger databases', () => {
+  const path = require('node:path');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const { DatabaseSync } = require('node:sqlite');
+  const { inspectBackup } = require('../src/main/db.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pl-'));
+
+  const textFile = path.join(dir, 'notes.sqlite');
+  fs.writeFileSync(textFile, 'definitely not sqlite');
+  const r1 = inspectBackup(textFile);
+  assert.equal(r1.ok, false);
+
+  const otherDb = path.join(dir, 'other.sqlite');
+  const other = new DatabaseSync(otherDb);
+  other.exec('CREATE TABLE something (id INTEGER)');
+  other.close();
+  const r2 = inspectBackup(otherDb);
+  assert.equal(r2.ok, false);
+  assert.match(r2.error, /missing tables/);
+});

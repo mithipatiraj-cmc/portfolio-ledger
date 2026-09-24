@@ -58,31 +58,3 @@ test('FILTERABLE_FIELDS includes an "all" option plus every joined lookup field'
   assert.ok(values.includes('nominee'));
   assert.ok(values.includes('joint_holder'));
 });
-
-test('summarizePolicies totals only the policies passed in (i.e. the filtered set)', () => {
-  const { summarizePolicies } = require('../src/renderer/filterPolicies.js');
-  const policies = [
-    { amount_invested: 100000, maturity_date: '2026-10-01' },
-    { amount_invested: 50000, maturity_date: '2027-06-01' },
-    { amount_invested: null, maturity_date: '2026-09-01' } // already matured
-  ];
-  const today = new Date('2026-09-24T00:00:00Z');
-
-  assert.deepEqual(summarizePolicies(policies, { today }), {
-    accountCount: 3, totalInvested: 150000, upcomingCount: 1
-  });
-  assert.deepEqual(summarizePolicies(policies.slice(1), { today }), {
-    accountCount: 2, totalInvested: 50000, upcomingCount: 0
-  });
-  assert.deepEqual(summarizePolicies([], { today }), { accountCount: 0, totalInvested: 0, upcomingCount: 0 });
-});
-
-test('summarizePolicies ignores soft-deleted rows shown via "Show deleted"', () => {
-  const { summarizePolicies } = require('../src/renderer/filterPolicies.js');
-  const today = new Date('2026-09-24T00:00:00Z');
-  const policies = [
-    { amount_invested: 1000, maturity_date: '2026-10-01', deleted_at: null },
-    { amount_invested: 5000, maturity_date: '2026-10-01', deleted_at: '2026-09-20 10:00:00' }
-  ];
-  assert.deepEqual(summarizePolicies(policies, { today }), { accountCount: 1, totalInvested: 1000, upcomingCount: 1 });
-});

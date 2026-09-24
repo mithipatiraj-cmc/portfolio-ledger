@@ -32,28 +32,7 @@
     );
   }
 
-  /**
-   * Header summary for whichever policies are currently shown, so it follows
-   * the filter. Soft-deleted rows (shown via "Show deleted") never count.
-   * Dates are ISO 'YYYY-MM-DD' strings, compared lexically.
-   */
-  function summarizePolicies(allShown, { upcomingWithinDays = 30, today = new Date() } = {}) {
-    const policies = allShown.filter((p) => !p.deleted_at);
-    const todayStr = today.toISOString().slice(0, 10);
-    const cutoff = new Date(today);
-    cutoff.setDate(cutoff.getDate() + upcomingWithinDays);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-    return {
-      accountCount: policies.length,
-      totalInvested: policies.reduce((sum, p) => sum + (Number(p.amount_invested) || 0), 0),
-      upcomingCount: policies.filter(
-        (p) => p.maturity_date && p.maturity_date >= todayStr && p.maturity_date <= cutoffStr
-      ).length
-    };
-  }
-
-  const api = { FILTERABLE_FIELDS, filterPolicies, summarizePolicies };
+  const api = { FILTERABLE_FIELDS, filterPolicies };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PolicyFilter = api;
 })(typeof window !== 'undefined' ? window : globalThis);

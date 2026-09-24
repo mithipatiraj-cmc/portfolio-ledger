@@ -1,39 +1,250 @@
+/* --- Theme tokens ---
+   Light is the default; dark applies when the user picks it, or when the
+   theme is "System" and the OS is in dark mode. Chart bar colours were
+   checked with the data-viz palette validator against each surface. */
+:root {
+  color-scheme: light;
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --hover: #fafaf8;
+  --border: #e6e2db;
+  --text: #1c1b1a;
+  --text-2: #4a463f;
+  --muted: #6b6560;
+  --faint: #a8a29a;
+  --accent: #2f6f4e;
+  --accent-ink: #ffffff;
+  --accent-text: #2f6f4e;
+  --bar: #1f8a5a;
+  --grid: #ece9e3;
+  --warn-bg: #fdf0d5;
+  --warn-ink: #7a4b00;
+  --crit-bg: #fbe1de;
+  --crit-ink: #8f1d12;
+  --overlay: rgba(28, 27, 26, 0.45);
+  --shadow: 0 4px 16px rgba(28, 27, 26, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #161514;
+    --surface: #1f1e1c;
+    --surface-2: #2a2826;
+    --hover: #252321;
+    --border: #3a3734;
+    --text: #ecebe8;
+    --text-2: #d3cec7;
+    --muted: #a39d95;
+    --faint: #6f6a64;
+    --accent: #2f7d58;
+    --accent-ink: #ffffff;
+    --accent-text: #5fb38a;
+    --bar: #3fa274;
+    --grid: #2e2c29;
+    --warn-bg: #3d2f10;
+    --warn-ink: #f5c870;
+    --crit-bg: #45201b;
+    --crit-ink: #ffa89d;
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #161514;
+  --surface: #1f1e1c;
+  --surface-2: #2a2826;
+  --hover: #252321;
+  --border: #3a3734;
+  --text: #ecebe8;
+  --text-2: #d3cec7;
+  --muted: #a39d95;
+  --faint: #6f6a64;
+  --accent: #2f7d58;
+  --accent-ink: #ffffff;
+  --accent-text: #5fb38a;
+  --bar: #3fa274;
+  --grid: #2e2c29;
+  --warn-bg: #3d2f10;
+  --warn-ink: #f5c870;
+  --crit-bg: #45201b;
+  --crit-ink: #ffa89d;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0;
-  color: #1c1b1a;
-  background: #f7f6f3;
+  color: var(--text);
+  background: var(--bg);
 }
 
 header {
-  padding: 16px 24px;
-  border-bottom: 1px solid #e6e2db;
-  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
-h1 { font-size: 1.2rem; margin: 0 0 4px; }
+h1 { font-size: 1.2rem; margin: 0; }
 
-.summary { color: #6b6560; font-size: 0.9rem; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
 
-main { padding: 16px 24px; }
+.theme-picker { color: var(--muted); font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
+
+main { padding: 16px 24px 32px; }
 
 .toolbar { margin-bottom: 12px; }
 
 button {
-  background: #2f6f4e;
-  color: #fff;
-  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid transparent;
   padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.85rem;
 }
 
+button.secondary {
+  background: var(--surface);
+  color: var(--text-2);
+  border-color: var(--border);
+}
+
+select, input[type="search"] {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 0.85rem;
+}
+
+/* --- Summary tiles --- */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.tile-label { color: var(--muted); font-size: 0.8rem; margin-bottom: 4px; }
+.tile-value { font-size: 1.35rem; font-weight: 600; }
+.tile-note { color: var(--muted); font-size: 0.75rem; margin-top: 2px; }
+
+/* --- Allocation chart --- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px 16px;
+  margin-bottom: 16px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel h2 { font-size: 0.95rem; margin: 0; }
+
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+
+.segmented .seg {
+  background: var(--surface);
+  color: var(--muted);
+  border: none;
+  border-radius: 0;
+  padding: 4px 12px;
+}
+
+.segmented .seg + .seg { border-left: 1px solid var(--border); }
+.segmented .seg.active { background: var(--surface-2); color: var(--text); font-weight: 600; }
+
+.bar-chart { display: flex; flex-direction: column; gap: 2px; }
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 180px) 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 26px; /* hit target taller than the 16px bar */
+  cursor: default;
+}
+
+.bar-label {
+  color: var(--text-2);
+  font-size: 0.83rem;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-track { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+.bar {
+  height: 16px;
+  background: var(--bar);
+  border-radius: 0 4px 4px 0; /* square at the baseline, rounded at the data end */
+  min-width: 2px;
+  flex: none;
+}
+
+.bar-row.other .bar { opacity: 0.55; }
+
+.bar-value {
+  color: var(--text-2);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bar-row:hover .bar-label, .bar-row:hover .bar-value { color: var(--text); }
+.bar-row:hover .bar { filter: brightness(1.12); }
+
+.chart-empty { color: var(--muted); font-size: 0.85rem; padding: 8px 0; }
+
+.chart-tooltip {
+  position: fixed;
+  z-index: 20;
+  pointer-events: none;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.chart-tooltip strong { display: block; }
+
+/* --- Policy table --- */
 table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  border: 1px solid #e6e2db;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -41,52 +252,66 @@ table {
 th, td {
   text-align: left;
   padding: 8px 10px;
-  border-bottom: 1px solid #e6e2db;
+  border-bottom: 1px solid var(--border);
   font-size: 0.88rem;
 }
 
-th { background: #f0eee9; font-weight: 600; }
+th { background: var(--surface-2); font-weight: 600; white-space: nowrap; }
 
-td[contenteditable="true"]:focus {
-  outline: 2px solid #2f6f4e;
-  outline-offset: -2px;
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+th[data-sort] { cursor: pointer; user-select: none; }
+th[data-sort]:hover { color: var(--accent-text); }
+th[data-sort]::after { content: " ↕"; color: var(--faint); font-weight: 400; }
+th[aria-sort="ascending"]::after { content: " ▲"; color: var(--text-2); }
+th[aria-sort="descending"]::after { content: " ▼"; color: var(--text-2); }
+
+.cell-edit { display: inline-block; min-width: 3ch; min-height: 1.2em; border-radius: 3px; }
+
+.cell-edit:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.lookup-cell { color: #4a463f; }
+.lookup-cell { color: var(--text-2); }
 
-tbody tr:hover { background: #fafaf8; }
+.calculated { color: var(--muted); font-style: italic; }
+
+tbody tr:hover { background: var(--hover); }
+
+/* Maturity badges: icon + text, never colour alone */
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.badge.critical { background: var(--crit-bg); color: var(--crit-ink); }
+.badge.warning { background: var(--warn-bg); color: var(--warn-ink); }
+.badge.matured { background: var(--surface-2); color: var(--muted); }
 
 /* --- Filter bar --- */
 .filter-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
-}
-
-.filter-bar select,
-.filter-bar input {
-  padding: 6px 8px;
-  border: 1px solid #e6e2db;
-  border-radius: 6px;
-  font-size: 0.85rem;
+  margin-bottom: 16px;
 }
 
 .filter-bar input { flex: 1; max-width: 280px; }
 
-.filter-bar button {
-  background: #fff;
-  color: #6b6560;
-  border: 1px solid #e6e2db;
-}
-
-.filter-count { color: #6b6560; font-size: 0.82rem; }
+.filter-count { color: var(--muted); font-size: 0.82rem; }
 
 /* --- Import mapping modal --- */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(28, 27, 26, 0.45);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -96,7 +321,7 @@ tbody tr:hover { background: #fafaf8; }
 .modal-overlay.hidden { display: none; }
 
 .modal {
-  background: #fff;
+  background: var(--surface);
   border-radius: 10px;
   padding: 20px 24px;
   width: 560px;
@@ -107,7 +332,7 @@ tbody tr:hover { background: #fafaf8; }
 
 .modal h2 { margin: 0 0 8px; font-size: 1.1rem; }
 
-.modal-sub { color: #6b6560; font-size: 0.85rem; margin: 0 0 16px; }
+.modal-sub { color: var(--muted); font-size: 0.85rem; margin: 0 0 16px; }
 
 .mapping-rows { display: flex; flex-direction: column; gap: 8px; }
 
@@ -127,13 +352,7 @@ tbody tr:hover { background: #fafaf8; }
   white-space: nowrap;
 }
 
-.mapping-row select {
-  flex: 1;
-  padding: 5px 6px;
-  border: 1px solid #e6e2db;
-  border-radius: 6px;
-  font-size: 0.83rem;
-}
+.mapping-row select { flex: 1; }
 
 .modal-actions {
   display: flex;
@@ -142,30 +361,25 @@ tbody tr:hover { background: #fafaf8; }
   margin-top: 18px;
 }
 
-.modal-actions button:first-child {
-  background: #fff;
-  color: #6b6560;
-  border: 1px solid #e6e2db;
-}
 /* --- Soft delete --- */
 .toggle {
   margin-left: 12px;
-  color: #6b6560;
+  color: var(--muted);
   font-size: 0.85rem;
   cursor: pointer;
 }
 
 tr.deleted td {
-  color: #a8a29a;
+  color: var(--muted);
   text-decoration: line-through;
 }
 
 tr.deleted td:last-child { text-decoration: none; }
 
 .restore-btn {
-  background: #fff;
-  color: #2f6f4e;
-  border: 1px solid #2f6f4e;
+  background: var(--surface);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-text);
 }
 
 /* --- Import sheet picker --- */
@@ -180,10 +394,4 @@ tr.deleted td:last-child { text-decoration: none; }
 
 .sheet-picker.hidden { display: none; }
 
-.sheet-picker select {
-  flex: 1;
-  padding: 5px 6px;
-  border: 1px solid #e6e2db;
-  border-radius: 6px;
-  font-size: 0.83rem;
-}
+.sheet-picker select { flex: 1; }

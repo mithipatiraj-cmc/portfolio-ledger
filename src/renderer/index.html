@@ -3,12 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <title>Portfolio Ledger</title>
+  <script>
+    // Apply the saved theme before first paint to avoid a light→dark flash.
+    try {
+      const t = localStorage.getItem('theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch {}
+  </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <h1>Portfolio Ledger</h1>
-    <div id="summary" class="summary"></div>
+    <div class="header-actions">
+      <button id="backupBtn" class="secondary">Back up</button>
+      <button id="restoreBtn" class="secondary">Restore…</button>
+      <label class="theme-picker">Theme
+        <select id="themeSelect">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+    </div>
   </header>
 
   <main>
@@ -20,26 +37,43 @@
     <div class="filter-bar">
       <select id="filterField"></select>
       <input id="filterQuery" type="search" placeholder="Filter…">
-      <button id="clearFilterBtn">Clear</button>
+      <button id="clearFilterBtn" class="secondary">Clear</button>
       <span id="filterCount" class="filter-count"></span>
     </div>
+
+    <section id="summary" class="tiles" aria-label="Summary of the policies shown"></section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2 id="allocationTitle">Amount invested by institution</h2>
+        <div class="segmented" role="group" aria-label="Group allocation by">
+          <button class="seg active" data-group="institution" aria-pressed="true">Institution</button>
+          <button class="seg" data-group="holder" aria-pressed="false">Holder</button>
+        </div>
+      </div>
+      <div id="allocationChart" class="bar-chart"></div>
+    </section>
+
     <table id="policyTable">
       <thead>
         <tr>
-          <th>Policy No</th>
-          <th>Instrument</th>
-          <th>Institution</th>
-          <th>Holder</th>
-          <th>Nominee</th>
-          <th>Amount Invested</th>
-          <th>ROI %</th>
-          <th>Maturity Date</th>
+          <th data-sort="policy_number">Policy No</th>
+          <th data-sort="instrument">Instrument</th>
+          <th data-sort="institution">Institution</th>
+          <th data-sort="holder">Holder</th>
+          <th data-sort="nominee">Nominee</th>
+          <th data-sort="amount_invested" class="num">Amount Invested</th>
+          <th data-sort="roi" class="num">ROI %</th>
+          <th data-sort="maturity_date">Maturity Date</th>
+          <th data-sort="maturity_value" class="num">Maturity Value</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="policyTableBody"></tbody>
     </table>
   </main>
+
+  <div id="chartTooltip" class="chart-tooltip" role="tooltip" hidden></div>
 
   <div id="mappingModal" class="modal-overlay hidden">
     <div class="modal">
@@ -51,13 +85,14 @@
       </div>
       <div id="mappingRows" class="mapping-rows"></div>
       <div class="modal-actions">
-        <button id="mappingCancelBtn">Cancel</button>
+        <button id="mappingCancelBtn" class="secondary">Cancel</button>
         <button id="mappingCommitBtn">Import</button>
       </div>
     </div>
   </div>
 
   <script src="filterPolicies.js"></script>
+  <script src="portfolioMath.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

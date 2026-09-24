@@ -1,6 +1,18 @@
 'use strict';
 
+const { FILTERABLE_FIELDS, filterPolicies } = window.PolicyFilter;
+const {
+  CRITICAL_DAYS,
+  roiPercent,
+  maturityValue,
+  maturityStatus,
+  summarizePolicies,
+  sortPolicies,
+  allocationBy
+} = window.PortfolioMath;
+
 const tableBody = document.getElementById('policyTableBody');
+const tableHead = document.querySelector('#policyTable thead');
 const summaryEl = document.getElementById('summary');
 const addRowBtn = document.getElementById('addRowBtn');
 const importBtn = document.getElementById('importBtn');
@@ -15,6 +27,12 @@ const mappingCommitBtn = document.getElementById('mappingCommitBtn');
 const showDeleted = document.getElementById('showDeleted');
 const sheetPicker = document.getElementById('sheetPicker');
 const sheetSelect = document.getElementById('sheetSelect');
+const allocationChart = document.getElementById('allocationChart');
+const allocationTitle = document.getElementById('allocationTitle');
+const chartTooltip = document.getElementById('chartTooltip');
+const backupBtn = document.getElementById('backupBtn');
+const restoreBtn = document.getElementById('restoreBtn');
+const themeSelect = document.getElementById('themeSelect');
 
 const EDITABLE_COLUMNS = [
   { key: 'policy_number', dbField: 'policy_number' },
@@ -22,17 +40,25 @@ const EDITABLE_COLUMNS = [
   { key: 'institution', dbField: null }, // lookup field — read-only inline for v1, edited via import/re-entry
   { key: 'holder', dbField: null },
   { key: 'nominee', dbField: null },
-  { key: 'amount_invested', dbField: 'amount_invested', numeric: true },
-  { key: 'roi', dbField: 'roi', numeric: true },
-  { key: 'maturity_date', dbField: 'maturity_date' }
+  { key: 'amount_invested', dbField: 'amount_invested', numeric: true, format: formatAmountInput },
+  { key: 'roi', dbField: 'roi', numeric: true, format: formatRoiInput },
+  { key: 'maturity_date', dbField: 'maturity_date', badge: true },
+  { key: 'maturity_value', dbField: null, render: renderMaturityValueCell }
 ];
 
-const UPCOMING_DAYS = 30;
+const UPCOMING_DAYS = CRITICAL_DAYS;
+
+const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const inrCompact = new Intl.NumberFormat('en-IN', {
+  style: 'currency', currency: 'INR', notation: 'compact', maximumFractionDigits: 2
+});
 
 let allPolicies = []; // last full fetch, before any filter is applied
+let sortState = { key: 'maturity_date', direction: 'asc' };
+let allocationGroup = 'institution';
 
 // --- Filter bar setup ---
-for (const opt of window.PolicyFilter.FILTERABLE_FIELDS) {
+for (const opt of FILTERABLE_FIELDS) {
   const el = document.createElement('option');
   el.value = opt.value;
   el.textContent = opt.label;
@@ -40,9 +66,11 @@ for (const opt of window.PolicyFilter.FILTERABLE_FIELDS) {
 }
 
 function applyFilterAndRender() {
-  const filtered = window.PolicyFilter.filterPolicies(allPolicies, filterField.value, filterQuery.value);
-  renderSummary(window.PolicyFilter.summarizePolicies(filtered, { upcomingWithinDays: UPCOMING_DAYS }));
-  renderTable(filtered);
+  const filtered = filterPolicies(allPolicies, filterField.value, filterQuery.value);
+  renderSummary(summarizePolicies(filtered, { upcomingWithinDays: UPCOMING_DAYS }));
+  renderAllocation(filtered);
+  renderTable(sortPolicies(filtered, sortState.key, sortState.direction));
+  renderSortIndicators();
   filterCount.textContent = filterQuery.value.trim()
     ? `${filtered.length} of ${allPolicies.length} shown`
     : '';
@@ -63,13 +91,133 @@ async function refresh() {
   applyFilterAndRender();
 }
 
-// Summary covers only the rows currently shown, so it follows the filter.
-function renderSummary(summary) {
-  summaryEl.textContent =
-    `${summary.accountCount} accounts · ₹${summary.totalInvested.toLocaleString('en-IN')} total` +
-    (summary.upcomingCount ? ` · ${summary.upcomingCount} maturing within ${UPCOMING_DAYS} days` : '');
+// --- Sorting: click a header to sort; click again to reverse ---
+tableHead.addEventListener('click', (e) => {
+  const th = e.target.closest('th[data-sort]');
+  if (!th) return;
+  const key = th.dataset.sort;
+  sortState = sortState.key === key
+    ? { key, direction: sortState.direction === 'asc' ? 'desc' : 'asc' }
+    : { key, direction: defaultDirection(key) };
+  applyFilterAndRender();
+});
+
+/** Numbers start largest-first; text and dates start A→Z / soonest-first. */
+function defaultDirection(key) {
+  return ['amount_invested', 'roi', 'maturity_value'].includes(key) ? 'desc' : 'asc';
 }
 
+function renderSortIndicators() {
+  for (const th of tableHead.querySelectorAll('th[data-sort]')) {
+    if (th.dataset.sort === sortState.key) {
+      th.setAttribute('aria-sort', sortState.direction === 'asc' ? 'ascending' : 'descending');
+    } else {
+      th.removeAttribute('aria-sort');
+    }
+  }
+}
+
+// --- Summary tiles: cover only the rows currently shown, so they follow the filter ---
+function renderSummary(summary) {
+  const tiles = [
+    { label: 'Accounts', value: summary.accountCount.toLocaleString('en-IN') },
+    { label: 'Total invested', value: inrCompact.format(summary.totalInvested), title: inr.format(summary.totalInvested) },
+    {
+      label: 'Weighted avg return',
+      value: summary.weightedAvgRoi === null ? '—' : `${summary.weightedAvgRoi.toFixed(2)}%`,
+      note: 'weighted by amount invested'
+    },
+    {
+      label: 'Expected at maturity',
+      value: inrCompact.format(summary.expectedAtMaturity),
+      title: inr.format(summary.expectedAtMaturity),
+      note: summary.missingMaturityValue ? `${summary.missingMaturityValue} without enough data` : ''
+    },
+    { label: `Maturing in ${UPCOMING_DAYS} days`, value: String(summary.upcomingCount) }
+  ];
+
+  summaryEl.replaceChildren(...tiles.map((t) => {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    if (t.title) tile.title = t.title;
+    tile.append(
+      el('div', 'tile-label', t.label),
+      el('div', 'tile-value', t.value)
+    );
+    if (t.note) tile.append(el('div', 'tile-note', t.note));
+    return tile;
+  }));
+}
+
+// --- Allocation chart: horizontal bars, one series, largest first ---
+document.querySelectorAll('.segmented .seg').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    allocationGroup = btn.dataset.group;
+    document.querySelectorAll('.segmented .seg').forEach((b) => {
+      const active = b === btn;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
+    applyFilterAndRender();
+  });
+});
+
+function renderAllocation(policies) {
+  const groupLabel = allocationGroup === 'holder' ? 'holder' : 'institution';
+  allocationTitle.textContent = `Amount invested by ${groupLabel}`;
+  const groups = allocationBy(policies, allocationGroup);
+  hideTooltip();
+
+  if (groups.length === 0) {
+    allocationChart.replaceChildren(el('div', 'chart-empty', 'No invested amounts to chart for the policies shown.'));
+    return;
+  }
+
+  const max = groups[0].amount;
+  allocationChart.replaceChildren(...groups.map((g) => {
+    const row = el('div', 'bar-row');
+    if (g.isOther) row.classList.add('other');
+
+    const bar = el('div', 'bar');
+    // Leave room for the value label beside the longest bar.
+    bar.style.width = `calc((100% - 150px) * ${g.amount / max})`;
+
+    const track = el('div', 'bar-track');
+    track.append(bar, el('span', 'bar-value', `${inrCompact.format(g.amount)} · ${(g.share * 100).toFixed(1)}%`));
+    row.append(el('div', 'bar-label', g.label), track);
+
+    const tip = [
+      g.label,
+      inr.format(g.amount),
+      `${(g.share * 100).toFixed(1)}% of total · ${g.count} ${g.count === 1 ? 'policy' : 'policies'}`
+    ];
+    row.addEventListener('mouseenter', (e) => showTooltip(tip, e));
+    row.addEventListener('mousemove', (e) => positionTooltip(e));
+    row.addEventListener('mouseleave', hideTooltip);
+    return row;
+  }));
+}
+
+function showTooltip([title, ...lines], e) {
+  chartTooltip.replaceChildren(el('strong', null, title), ...lines.map((l) => el('div', null, l)));
+  chartTooltip.hidden = false;
+  positionTooltip(e);
+}
+
+function positionTooltip(e) {
+  const pad = 14;
+  const { offsetWidth: w, offsetHeight: h } = chartTooltip;
+  const x = Math.min(e.clientX + pad, window.innerWidth - w - 8);
+  const y = e.clientY + pad + h > window.innerHeight ? e.clientY - h - pad : e.clientY + pad;
+  chartTooltip.style.left = `${x}px`;
+  chartTooltip.style.top = `${y}px`;
+}
+
+function hideTooltip() {
+  chartTooltip.hidden = true;
+}
+
+// --- Table ---
 function renderTable(policies) {
   tableBody.innerHTML = '';
   for (const row of policies) {
@@ -83,15 +231,25 @@ function renderTable(policies) {
 
     for (const col of EDITABLE_COLUMNS) {
       const td = document.createElement('td');
-      const value = row[col.key] ?? '';
-      if (col.dbField && !isDeleted) {
-        td.contentEditable = 'true';
-        td.textContent = value;
-        td.addEventListener('blur', () => onCellEdit(row.id, col, td));
+      if (col.numeric || col.key === 'maturity_value') td.classList.add('num');
+
+      if (col.render) {
+        col.render(td, row);
       } else {
-        // Lookup-derived fields (institution/holder/nominee) and deleted rows: plain text.
-        td.textContent = value;
-        if (!col.dbField) td.classList.add('lookup-cell');
+        const value = col.format ? col.format(row[col.key]) : row[col.key] ?? '';
+        if (col.dbField && !isDeleted) {
+          // Editable text lives in its own span so badges beside it aren't part of the edit.
+          const span = el('span', 'cell-edit', value);
+          span.contentEditable = 'true';
+          span.addEventListener('blur', () => onCellEdit(row, col, span));
+          td.appendChild(span);
+          td.addEventListener('click', (e) => { if (e.target === td) span.focus(); });
+        } else {
+          // Lookup-derived fields (institution/holder/nominee) and deleted rows: plain text.
+          td.textContent = value;
+          if (!col.dbField) td.classList.add('lookup-cell');
+        }
+        if (col.badge && !isDeleted) appendMaturityBadge(td, row.maturity_date);
       }
       tr.appendChild(td);
     }
@@ -104,6 +262,7 @@ function renderTable(policies) {
       actionBtn.addEventListener('click', () => onRestore(row.id));
     } else {
       actionBtn.textContent = 'Delete';
+      actionBtn.className = 'secondary';
       actionBtn.addEventListener('click', () => onDelete(row.id));
     }
     actionTd.appendChild(actionBtn);
@@ -113,16 +272,66 @@ function renderTable(policies) {
   }
 }
 
-async function onCellEdit(id, col, td) {
-  let value = td.textContent.trim();
+/** ≤30 days: critical, ≤60 days: warning, past: matured. Always icon + text, not colour alone. */
+function appendMaturityBadge(td, maturityDate) {
+  const status = maturityStatus(maturityDate);
+  if (!status?.level) return;
+  const { days, level } = status;
+  const text = {
+    matured: 'Matured',
+    critical: days === 0 ? '⚠ Today' : `⚠ ${days}d`,
+    warning: `◷ ${days}d`
+  }[level];
+  const badge = el('span', `badge ${level}`, text);
+  badge.title = level === 'matured'
+    ? `Matured ${-days} day${days === -1 ? '' : 's'} ago`
+    : `Matures in ${days} day${days === 1 ? '' : 's'}`;
+  td.appendChild(badge);
+}
+
+function renderMaturityValueCell(td, row) {
+  const { value, calculated, calc } = maturityValue(row);
+  if (value === null) {
+    td.textContent = '—';
+    td.title = 'Not enough data to calculate (needs amount, ROI, and dates or term).';
+    return;
+  }
+  td.textContent = (calculated ? '≈ ' : '') + inr.format(value);
+  if (calculated) td.classList.add('calculated');
+  if (calc) {
+    const how = `${calc.rate.toFixed(2)}% compounded ${calc.periodsPerYear}×/yr over ${calc.years.toFixed(2)} yrs`;
+    td.title = calculated
+      ? `Calculated: ${how}`
+      : `Recorded amount. Calculated from the rate: ${inr.format(calc.value)} (${how})`;
+  } else {
+    td.title = 'Recorded amount';
+  }
+}
+
+/** 997154 → "9,97,154". Commas are stripped again when an edit is saved. */
+function formatAmountInput(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : String(v);
+}
+
+/** Shown as a percentage (6.85) whether stored as 0.0685 or 6.85. */
+function formatRoiInput(v) {
+  const pct = roiPercent(v);
+  return pct === null ? '' : String(Number(pct.toFixed(4)));
+}
+
+async function onCellEdit(row, col, span) {
+  let value = span.textContent.trim();
+  if (value === (col.format ? col.format(row[col.key]) : String(row[col.key] ?? ''))) return; // unchanged
   if (col.numeric) {
-    const parsed = Number(value);
-    value = Number.isFinite(parsed) ? parsed : null;
+    const parsed = Number(value.replace(/[,₹%\s]/g, ''));
+    value = value === '' || !Number.isFinite(parsed) ? null : parsed;
   } else if (value === '') {
     value = null;
   }
   try {
-    await window.api.updatePolicy(id, { [col.dbField]: value });
+    await window.api.updatePolicy(row.id, { [col.dbField]: value });
   } catch (err) {
     alert(ipcErrorMessage(err)); // refresh below puts the previous value back
   }
@@ -132,6 +341,13 @@ async function onCellEdit(id, col, td) {
 /** Electron wraps main-process errors as "Error invoking remote method '…': Error: <msg>" — keep just <msg>. */
 function ipcErrorMessage(err) {
   return String(err?.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
 async function onDelete(id) {
@@ -158,6 +374,54 @@ addRowBtn.addEventListener('click', async () => {
   await refresh();
 });
 
+// --- Backup & restore ---
+backupBtn.addEventListener('click', async () => {
+  try {
+    const result = await window.api.backupDb();
+    if (result) alert(`Backup saved to:\n${result.filePath}`);
+  } catch (err) {
+    alert(`Backup failed: ${ipcErrorMessage(err)}`);
+  }
+});
+
+restoreBtn.addEventListener('click', async () => {
+  try {
+    const result = await window.api.restoreDb();
+    if (!result) return; // cancelled
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    alert(`Restored ${result.policyCount} policies.\n\nYour previous data was saved to:\n${result.safetyPath}`);
+    await refresh();
+  } catch (err) {
+    alert(`Restore failed: ${ipcErrorMessage(err)}`);
+  }
+});
+
+// --- Theme: System (follows the OS) / Light / Dark, remembered on this machine ---
+function readTheme() {
+  try {
+    return localStorage.getItem('theme') || 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+}
+
+themeSelect.value = readTheme();
+themeSelect.addEventListener('change', () => {
+  applyTheme(themeSelect.value);
+  try {
+    localStorage.setItem('theme', themeSelect.value);
+  } catch {}
+});
+
+// --- Excel import ---
 importBtn.addEventListener('click', async () => {
   const preview = await window.api.importPreview();
   if (!preview) return; // user cancelled the file picker

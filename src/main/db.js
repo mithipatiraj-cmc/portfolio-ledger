@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 const { toTitleCase } = require('../shared/nameCase.js');
 const { isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
@@ -131,6 +132,39 @@ function normalizeLookupNames(db) {
   } catch (err) {
     db.exec('ROLLBACK');
     throw err;
+  }
+}
+
+/**
+ * Write a consistent copy of the open database to destPath (overwriting it).
+ * VACUUM INTO is safe while the app is running, unlike copying the file.
+ */
+function backupTo(db, destPath) {
+  fs.rmSync(destPath, { force: true }); // VACUUM INTO refuses to overwrite
+  db.prepare('VACUUM INTO ?').run(destPath);
+}
+
+/**
+ * Check that a file is a Portfolio Ledger database before restoring from it.
+ * Returns { ok: true, policyCount } or { ok: false, error }.
+ */
+function inspectBackup(filePath) {
+  let candidate;
+  try {
+    candidate = new DatabaseSync(filePath, { readOnly: true });
+    const tables = new Set(
+      candidate.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name)
+    );
+    const missing = ['policies', 'institutions', 'people', 'destinations'].filter((t) => !tables.has(t));
+    if (missing.length) return { ok: false, error: `Not a Portfolio Ledger backup (missing tables: ${missing.join(', ')}).` };
+    const integrity = candidate.prepare('PRAGMA integrity_check').get();
+    if (Object.values(integrity)[0] !== 'ok') return { ok: false, error: 'The backup file is damaged (integrity check failed).' };
+    const { n } = candidate.prepare('SELECT COUNT(*) AS n FROM policies').get();
+    return { ok: true, policyCount: n };
+  } catch (err) {
+    return { ok: false, error: `Could not read the file as a database: ${err.message}` };
+  } finally {
+    candidate?.close();
   }
 }
 
@@ -342,6 +376,8 @@ function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
 
 module.exports = {
   initDb,
+  backupTo,
+  inspectBackup,
   recreateDbSchema,
   upsertInstitution,
   upsertPerson,

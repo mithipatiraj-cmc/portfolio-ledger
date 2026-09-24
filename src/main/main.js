@@ -16,6 +16,12 @@ function getDbPath() {
   return path.join(app.getPath('userData'), 'portfolio-ledger.sqlite');
 }
 
+/** portfolio-ledger.sqlite → portfolio-ledger.<label>-<timestamp>.sqlite, next to it. */
+function timestampedCopyPath(dbPath, label) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return dbPath.replace(/\.sqlite$/, `.${label}-${stamp}.sqlite`);
+}
+
 /**
  * When DB_RESET=true (in .env), drop and recreate every table on startup.
  * The existing database file is copied to a timestamped backup first, so a
@@ -24,8 +30,7 @@ function getDbPath() {
 function resetDbIfRequested(dbPath) {
   if (process.env.DB_RESET !== 'true') return;
   if (fs.existsSync(dbPath)) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = dbPath.replace(/\.sqlite$/, `.backup-${stamp}.sqlite`);
+    const backupPath = timestampedCopyPath(dbPath, 'backup');
     fs.copyFileSync(dbPath, backupPath);
     console.log(`DB_RESET: backed up existing database to ${backupPath}`);
   }
@@ -85,6 +90,61 @@ app.whenReady().then(() => {
     return commitImport(database, db, buffer, { sheetName, columnMapping });
   });
 
+  // --- Backup & restore ---
+  ipcMain.handle('db:backup', async (event) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const { canceled, filePath } = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+      title: 'Save backup',
+      defaultPath: path.join(app.getPath('documents'), `portfolio-ledger-backup-${today}.sqlite`),
+      filters: [{ name: 'Portfolio Ledger backup', extensions: ['sqlite'] }]
+    });
+    if (canceled || !filePath) return null;
+    db.backupTo(database, filePath);
+    return { ok: true, filePath };
+  });
+
+  ipcMain.handle('db:restore', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Restore from backup',
+      properties: ['openFile'],
+      filters: [{ name: 'Portfolio Ledger backup', extensions: ['sqlite'] }]
+    });
+    if (canceled || filePaths.length === 0) return null;
+    const sourcePath = filePaths[0];
+
+    const backup = db.inspectBackup(sourcePath);
+    if (!backup.ok) return { ok: false, error: backup.error };
+
+    const currentCount = db.listPolicies(database, { includeDeleted: true }).length;
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Restore', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'Replace all current data with this backup?',
+      detail:
+        `Current data: ${currentCount} policies.\nBackup: ${backup.policyCount} policies.\n\n` +
+        'A safety copy of the current data is saved first, next to the database file.'
+    });
+    if (response !== 0) return null;
+
+    // Safety copy first, then swap the file in and reopen (initDb runs any migrations).
+    const dbPath = getDbPath();
+    const safetyPath = timestampedCopyPath(dbPath, 'before-restore');
+    db.backupTo(database, safetyPath);
+    database.close();
+    try {
+      fs.copyFileSync(sourcePath, dbPath);
+      database = db.initDb(dbPath);
+    } catch (err) {
+      fs.copyFileSync(safetyPath, dbPath);
+      database = db.initDb(dbPath);
+      return { ok: false, error: `Restore failed, your previous data is unchanged: ${err.message}` };
+    }
+    return { ok: true, policyCount: backup.policyCount, safetyPath };
+  });
+
   createWindow();
 
   app.on('activate', () => {
@@ -92,7 +152,12 @@ app.whenReady().then(() => {
   });
 });
 
+// On macOS the app stays running with no windows and can reopen one from the
+// Dock, so the database is closed on quit rather than when the last window closes.
 app.on('window-all-closed', () => {
-  if (database) database.close();
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+  if (database) database.close();
 });
