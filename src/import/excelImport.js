@@ -2,7 +2,7 @@
 
 const XLSX = require('xlsx');
 const { toTitleCase } = require('../shared/nameCase.js');
-const { isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
+const { isFixedDeposit, isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
 
 /**
  * Maps Excel column headers (as they appear in the user's sheet) to schema field names.
@@ -127,6 +127,9 @@ function parseWorkbook(buffer, { sheetName, columnMapping } = {}) {
         const raw = r[Number(colIndex)];
         if (field === 'maturityDate' || field === 'startDate') {
           data[field] = parseExcelDate(raw);
+        } else if (field === 'instrument' && isFixedDeposit(raw)) {
+          // "FD", "F D", "f.d." etc. are all stored under one name.
+          data[field] = 'Fixed Deposit';
         } else if (NUMERIC_FIELDS.includes(field)) {
           data[field] = parseNumeric(raw);
         } else if (NAME_FIELDS.includes(field)) {

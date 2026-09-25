@@ -234,3 +234,19 @@ test('validateRow: maturity date is required for fixed deposits only', () => {
   assert.deepEqual(validateRow({ ...base, instrument: null }), []);
   assert.deepEqual(validateRow({ ...base, instrument: 'FD', maturityDate: '2027-01-01' }), []);
 });
+
+test('parseWorkbook: every spelling of fixed deposit is stored as "Fixed Deposit"', () => {
+  const spellings = ['FD', 'F D', 'fd', 'f.d.', 'fixed deposit', 'Fixed Deposit', 'NSC'];
+  const rows = spellings.map((instrument, i) => {
+    const r = row_stub();
+    r[0] = `P-${i}`;
+    r[1] = instrument;
+    return r;
+  });
+
+  const { rows: parsed } = parseWorkbook(buildWorkbookBuffer(REAL_HEADERS, rows));
+
+  assert.deepEqual(parsed.map((r) => r.data.instrument), [
+    'Fixed Deposit', 'Fixed Deposit', 'Fixed Deposit', 'Fixed Deposit', 'Fixed Deposit', 'Fixed Deposit', 'NSC'
+  ]);
+});
