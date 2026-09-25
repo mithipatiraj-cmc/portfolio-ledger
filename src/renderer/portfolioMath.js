@@ -98,6 +98,12 @@
     return { days, level };
   }
 
+  /** True when the policy matures between today and `days` days from now (inclusive). */
+  function isMaturingWithin(p, days, today = new Date()) {
+    const status = maturityStatus(p.maturity_date, today);
+    return Boolean(status) && status.days >= 0 && status.days <= days;
+  }
+
   /** Average ROI (%) weighted by amount invested; policies without an ROI are left out. */
   function weightedAverageRoi(policies) {
     let weighted = 0;
@@ -128,10 +134,7 @@
     return {
       accountCount: policies.length,
       totalInvested: policies.reduce((sum, p) => sum + (Number(p.amount_invested) || 0), 0),
-      upcomingCount: policies.filter((p) => {
-        const status = maturityStatus(p.maturity_date, today);
-        return status && status.days >= 0 && status.days <= upcomingWithinDays;
-      }).length,
+      upcomingCount: policies.filter((p) => isMaturingWithin(p, upcomingWithinDays, today)).length,
       weightedAvgRoi: weightedAverageRoi(policies),
       expectedAtMaturity,
       missingMaturityValue
@@ -217,6 +220,7 @@
     calcMaturityValue,
     maturityValue,
     maturityStatus,
+    isMaturingWithin,
     weightedAverageRoi,
     summarizePolicies,
     sortPolicies,

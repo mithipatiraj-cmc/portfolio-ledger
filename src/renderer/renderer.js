@@ -6,6 +6,7 @@ const {
   roiPercent,
   maturityValue,
   maturityStatus,
+  isMaturingWithin,
   summarizePolicies,
   sortPolicies,
   allocationBy
@@ -71,25 +72,29 @@ for (const opt of FILTERABLE_FIELDS) {
 // Applied filters, shown as "Field: value" chips. What's being typed in the
 // search box is applied live as well, before it's added as a chip.
 let filterChips = []; // [{ field, query }]
+// Toggled by the "Maturing in 30 days" tile; ANDs with the chips above.
+let upcomingOnly = false;
 
 const pendingFilter = () => ({ field: filterField.value, query: filterQuery.value });
 
 function applyFilterAndRender() {
   const filters = [...filterChips, pendingFilter()];
-  const filtered = applyFilters(allPolicies, filters);
+  let filtered = applyFilters(allPolicies, filters);
+  // Deleted rows are left out so the rows shown match the tile's count.
+  if (upcomingOnly) filtered = filtered.filter((p) => !p.deleted_at && isMaturingWithin(p, UPCOMING_DAYS));
   renderSummary(summarizePolicies(filtered, { upcomingWithinDays: UPCOMING_DAYS }));
   renderAllocation(filtered);
   renderTable(sortPolicies(filtered, sortState.key, sortState.direction));
   renderSortIndicators();
   renderFilterChips();
   renderFilterSuggestions();
-  const active = hasActiveFilter(filters);
+  const active = hasActiveFilter(filters) || upcomingOnly;
   clearFilterBtn.hidden = !active;
   filterCount.textContent = active ? `${filtered.length} of ${allPolicies.length} shown` : '';
 }
 
 function renderFilterChips() {
-  filterChipsEl.replaceChildren(...filterChips.map((chip, index) => {
+  const chips = filterChips.map((chip, index) => {
     const label = `${fieldLabel(chip.field)}: ${chip.query}`;
     const node = el('span', 'chip');
     node.title = label;
@@ -100,7 +105,22 @@ function renderFilterChips() {
     remove.addEventListener('click', () => removeFilterChip(index));
     node.append(text, remove);
     return node;
-  }));
+  });
+  if (upcomingOnly) {
+    const label = `Maturing in ${UPCOMING_DAYS} days`;
+    const node = el('span', 'chip');
+    const remove = el('button', 'chip-remove', '×');
+    remove.setAttribute('aria-label', `Remove filter ${label}`);
+    remove.addEventListener('click', () => setUpcomingOnly(false));
+    node.append(el('span', 'chip-text', label), remove);
+    chips.unshift(node);
+  }
+  filterChipsEl.replaceChildren(...chips);
+}
+
+function setUpcomingOnly(on) {
+  upcomingOnly = on;
+  applyFilterAndRender();
 }
 
 /**
@@ -158,6 +178,7 @@ filterQuery.addEventListener('keydown', (e) => {
 addFilterBtn.addEventListener('click', addFilterChip);
 clearFilterBtn.addEventListener('click', () => {
   filterChips = [];
+  upcomingOnly = false;
   filterQuery.value = '';
   filterField.value = 'all';
   applyFilterAndRender();
@@ -212,12 +233,23 @@ function renderSummary(summary) {
       title: inr.format(summary.expectedAtMaturity),
       note: summary.missingMaturityValue ? `${summary.missingMaturityValue} without enough data` : ''
     },
-    { label: `Maturing in ${UPCOMING_DAYS} days`, value: String(summary.upcomingCount) }
+    {
+      label: `Maturing in ${UPCOMING_DAYS} days`,
+      value: String(summary.upcomingCount),
+      note: upcomingOnly ? 'showing only these · click to show all' : 'click to show only these',
+      toggle: { pressed: upcomingOnly, onClick: () => setUpcomingOnly(!upcomingOnly) }
+    }
   ];
 
   summaryEl.replaceChildren(...tiles.map((t) => {
-    const tile = document.createElement('div');
+    const tile = document.createElement(t.toggle ? 'button' : 'div');
     tile.className = 'tile';
+    if (t.toggle) {
+      tile.type = 'button';
+      tile.classList.add('tile-toggle');
+      tile.setAttribute('aria-pressed', String(t.toggle.pressed));
+      tile.addEventListener('click', t.toggle.onClick);
+    }
     if (t.title) tile.title = t.title;
     tile.append(
       el('div', 'tile-label', t.label),

@@ -9,6 +9,7 @@ const {
   calcMaturityValue,
   maturityValue,
   maturityStatus,
+  isMaturingWithin,
   weightedAverageRoi,
   summarizePolicies,
   sortPolicies,
@@ -171,4 +172,13 @@ test('allocationBy groups amounts, sorts largest first, and folds the tail into 
   const folded = allocationBy(rows, 'institution', { maxGroups: 3 });
   assert.deepEqual(folded.map((g) => [g.label, g.amount]), [['HDFC', 500], ['SBI', 100], ['Other (2)', 100]]);
   assert.ok(folded[2].isOther);
+});
+
+test('isMaturingWithin: today through the last day counts; past, later and undated do not', () => {
+  const at = (maturity_date) => isMaturingWithin({ maturity_date }, 30, TODAY);
+  assert.equal(at('2026-09-24'), true, 'today');
+  assert.equal(at('2026-10-24'), true, 'day 30');
+  assert.equal(at('2026-10-25'), false, 'day 31');
+  assert.equal(at('2026-09-23'), false, 'already matured');
+  assert.equal(at(null), false, 'no maturity date');
 });
