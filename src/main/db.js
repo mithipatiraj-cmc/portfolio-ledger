@@ -226,9 +226,11 @@ function upsertPerson(db, name) {
 }
 
 function upsertDestination(db, bank, account) {
-  bank = toTitleCase(bank);
+  bank = toTitleCase(bank) ?? null;
+  account = account ?? null;
   if (!bank && !account) return null;
-  const existing = db.prepare('SELECT id FROM destinations WHERE bank = ? AND account = ?').get(bank, account);
+  // IS rather than = so a missing bank or account (NULL) still matches its existing row.
+  const existing = db.prepare('SELECT id FROM destinations WHERE bank IS ? AND account IS ?').get(bank, account);
   if (existing) return existing.id;
   const info = db.prepare('INSERT INTO destinations (bank, account) VALUES (?, ?)').run(bank, account);
   return Number(info.lastInsertRowid);

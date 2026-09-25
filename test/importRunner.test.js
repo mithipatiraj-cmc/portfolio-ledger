@@ -176,3 +176,18 @@ test('commitImport: an FD without maturity date is invalid, a non-FD without one
   assert.equal(nsc.policy_number, 'NSC-NODATE');
   assert.equal(nsc.maturity_date, null);
 });
+
+test('commitImport: a destination bank with no account column imports and reuses one destination row', () => {
+  const database = dbModule.initDb(':memory:');
+  const buffer = buildWorkbookBuffer([
+    row({ policyNumber: 'FD-001', destinationBank: 'ICICI' }),
+    row({ policyNumber: 'FD-002', destinationBank: 'ICICI' })
+  ]);
+  const expectedCol = HEADERS.indexOf('Expected');
+
+  const result = commitImport(database, dbModule, buffer, { columnMapping: { [expectedCol]: '' } });
+
+  assert.equal(result.added, 2);
+  const destinations = database.prepare('SELECT bank, account FROM destinations').all();
+  assert.deepEqual(destinations.map((d) => ({ ...d })), [{ bank: 'ICICI', account: null }]);
+});
