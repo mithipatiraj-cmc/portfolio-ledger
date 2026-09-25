@@ -1,6 +1,6 @@
 'use strict';
 
-const { FILTERABLE_FIELDS, applyFilters, hasActiveFilter, distinctValues } = window.PolicyFilter;
+const { FILTERABLE_FIELDS, applyFilters, hasActiveFilter, distinctValues, fieldLabel } = window.PolicyFilter;
 const {
   CRITICAL_DAYS,
   roiPercent,
@@ -20,8 +20,9 @@ const filterField = document.getElementById('filterField');
 const filterQuery = document.getElementById('filterQuery');
 const clearFilterBtn = document.getElementById('clearFilterBtn');
 const filterCount = document.getElementById('filterCount');
-const institutionFilter = document.getElementById('institutionFilter');
-const holderFilter = document.getElementById('holderFilter');
+const addFilterBtn = document.getElementById('addFilterBtn');
+const filterChipsEl = document.getElementById('filterChips');
+const filterSuggestions = document.getElementById('filterSuggestions');
 const mappingModal = document.getElementById('mappingModal');
 const mappingRows = document.getElementById('mappingRows');
 const mappingCancelBtn = document.getElementById('mappingCancelBtn');
@@ -67,42 +68,97 @@ for (const opt of FILTERABLE_FIELDS) {
   filterField.appendChild(el);
 }
 
-// Every filter in the bar; a row must match all of them. The free-text box
-// searches the field chosen in the dropdown; the others are fixed fields.
-const FILTER_INPUTS = [
-  { input: filterQuery, field: () => filterField.value },
-  { input: institutionFilter, field: () => 'institution', suggestions: document.getElementById('institutionOptions') },
-  { input: holderFilter, field: () => 'holder', suggestions: document.getElementById('holderOptions') }
-];
+// Applied filters, shown as "Field: value" chips. What's being typed in the
+// search box is applied live as well, before it's added as a chip.
+let filterChips = []; // [{ field, query }]
 
-const currentFilters = (except) =>
-  FILTER_INPUTS.filter((f) => f !== except).map((f) => ({ field: f.field(), query: f.input.value }));
+const pendingFilter = () => ({ field: filterField.value, query: filterQuery.value });
 
 function applyFilterAndRender() {
-  const filters = currentFilters();
+  const filters = [...filterChips, pendingFilter()];
   const filtered = applyFilters(allPolicies, filters);
   renderSummary(summarizePolicies(filtered, { upcomingWithinDays: UPCOMING_DAYS }));
   renderAllocation(filtered);
   renderTable(sortPolicies(filtered, sortState.key, sortState.direction));
   renderSortIndicators();
+  renderFilterChips();
   renderFilterSuggestions();
-  for (const f of FILTER_INPUTS) f.input.classList.toggle('active', f.input.value.trim() !== '');
-  filterCount.textContent = hasActiveFilter(filters) ? `${filtered.length} of ${allPolicies.length} shown` : '';
+  const active = hasActiveFilter(filters);
+  clearFilterBtn.hidden = !active;
+  filterCount.textContent = active ? `${filtered.length} of ${allPolicies.length} shown` : '';
 }
 
-/** Suggest values from the rows the *other* filters leave, so choices narrow as you filter. */
+function renderFilterChips() {
+  filterChipsEl.replaceChildren(...filterChips.map((chip, index) => {
+    const label = `${fieldLabel(chip.field)}: ${chip.query}`;
+    const node = el('span', 'chip');
+    node.title = label;
+    const text = el('span', 'chip-text');
+    text.append(el('span', 'chip-field', `${fieldLabel(chip.field)}: `), chip.query);
+    const remove = el('button', 'chip-remove', '×');
+    remove.setAttribute('aria-label', `Remove filter ${label}`);
+    remove.addEventListener('click', () => removeFilterChip(index));
+    node.append(text, remove);
+    return node;
+  }));
+}
+
+/**
+ * Suggest values of the chosen field from the rows the other fields' chips
+ * leave (chips on this same field are OR-ed, so they don't narrow it).
+ */
 function renderFilterSuggestions() {
-  for (const f of FILTER_INPUTS) {
-    if (!f.suggestions) continue;
-    const rows = applyFilters(allPolicies, currentFilters(f));
-    f.suggestions.replaceChildren(...distinctValues(rows, f.field()).map((v) => Object.assign(document.createElement('option'), { value: v })));
+  const field = filterField.value;
+  if (field === 'all') {
+    filterSuggestions.replaceChildren();
+    return;
   }
+  const rows = applyFilters(allPolicies, filterChips.filter((c) => c.field !== field));
+  const taken = new Set(filterChips.filter((c) => c.field === field).map((c) => c.query.toLowerCase()));
+  filterSuggestions.replaceChildren(...distinctValues(rows, field)
+    .filter((v) => !taken.has(v.toLowerCase()))
+    .map((v) => Object.assign(document.createElement('option'), { value: v })));
+}
+
+/** Turn the text in the search box into a chip (ignoring blanks and exact duplicates). */
+function addFilterChip() {
+  const { field, query } = pendingFilter();
+  const value = query.trim();
+  if (value) {
+    const duplicate = filterChips.some((c) => c.field === field && c.query.toLowerCase() === value.toLowerCase());
+    if (!duplicate) filterChips.push({ field, query: value });
+  }
+  filterQuery.value = '';
+  applyFilterAndRender();
+  filterQuery.focus();
+}
+
+function removeFilterChip(index) {
+  filterChips.splice(index, 1);
+  applyFilterAndRender();
 }
 
 filterField.addEventListener('change', applyFilterAndRender);
-for (const f of FILTER_INPUTS) f.input.addEventListener('input', applyFilterAndRender);
+filterQuery.addEventListener('input', (e) => {
+  // Picking a value from the suggestion list adds it straight away.
+  if (e.inputType === 'insertReplacementText' || (!e.inputType && filterSuggestions.querySelector(`option[value="${CSS.escape(filterQuery.value)}"]`))) {
+    addFilterChip();
+    return;
+  }
+  applyFilterAndRender();
+});
+filterQuery.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addFilterChip();
+  } else if (e.key === 'Backspace' && filterQuery.value === '' && filterChips.length > 0) {
+    removeFilterChip(filterChips.length - 1);
+  }
+});
+addFilterBtn.addEventListener('click', addFilterChip);
 clearFilterBtn.addEventListener('click', () => {
-  for (const f of FILTER_INPUTS) f.input.value = '';
+  filterChips = [];
+  filterQuery.value = '';
   filterField.value = 'all';
   applyFilterAndRender();
 });

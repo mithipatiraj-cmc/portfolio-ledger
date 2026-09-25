@@ -33,11 +33,26 @@
   }
 
   /**
-   * Apply several filters at once: a row must match every one (AND).
+   * Apply several filters at once. Filters on different fields must all
+   * match (AND); filters on the same field match any of their values (OR),
+   * so "Institution: HDFC" + "Institution: SBI" shows both banks.
    * filters: [{ field, query }, …]; blank queries are ignored.
    */
   function applyFilters(policies, filters) {
-    return filters.reduce((rows, { field, query }) => filterPolicies(rows, field, query), policies);
+    const byField = new Map();
+    for (const { field, query } of filters) {
+      if (String(query ?? '').trim() === '') continue;
+      byField.set(field, [...(byField.get(field) ?? []), query]);
+    }
+    let rows = policies;
+    for (const [field, queries] of byField) {
+      rows = rows.filter((p) => queries.some((q) => filterPolicies([p], field, q).length > 0));
+    }
+    return rows;
+  }
+
+  function fieldLabel(field) {
+    return field === 'all' ? 'Any field' : FILTERABLE_FIELDS.find((f) => f.value === field)?.label ?? field;
   }
 
   /** True when at least one filter has a non-blank query. */
@@ -59,7 +74,7 @@
     return [...values].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
   }
 
-  const api = { FILTERABLE_FIELDS, filterPolicies, applyFilters, hasActiveFilter, distinctValues };
+  const api = { FILTERABLE_FIELDS, filterPolicies, applyFilters, hasActiveFilter, distinctValues, fieldLabel };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PolicyFilter = api;
 })(typeof window !== 'undefined' ? window : globalThis);

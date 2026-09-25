@@ -87,3 +87,32 @@ test('distinctValues lists unique non-blank values, sorted case-insensitively', 
   assert.deepEqual(distinctValues(SAMPLE, 'joint_holder'), ['Asha'], 'blanks dropped');
   assert.deepEqual(distinctValues([{ holder: 'b' }, { holder: 'A' }, { holder: 'b' }], 'holder'), ['A', 'b']);
 });
+
+test('applyFilters: filters on the same field match either value (OR), across fields AND', () => {
+  const { applyFilters } = require('../src/renderer/filterPolicies.js');
+  const rows = [
+    { policy_number: 'A', institution: 'HDFC', holder: 'Raviraj' },
+    { policy_number: 'B', institution: 'SBI', holder: 'Madhavi' },
+    { policy_number: 'C', institution: 'SBI', holder: 'Raviraj' },
+    { policy_number: 'D', institution: 'LIC', holder: 'Raviraj' }
+  ];
+  const ids = (list) => list.map((r) => r.policy_number);
+
+  assert.deepEqual(ids(applyFilters(rows, [
+    { field: 'institution', query: 'hdfc' },
+    { field: 'institution', query: 'sbi' }
+  ])), ['A', 'B', 'C']);
+
+  assert.deepEqual(ids(applyFilters(rows, [
+    { field: 'institution', query: 'hdfc' },
+    { field: 'institution', query: 'sbi' },
+    { field: 'holder', query: 'raviraj' }
+  ])), ['A', 'C']);
+});
+
+test('fieldLabel names chips the way the dropdown does', () => {
+  const { fieldLabel } = require('../src/renderer/filterPolicies.js');
+  assert.equal(fieldLabel('institution'), 'Institution');
+  assert.equal(fieldLabel('joint_holder'), 'Joint holder');
+  assert.equal(fieldLabel('all'), 'Any field');
+});
