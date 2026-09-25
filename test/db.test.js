@@ -7,6 +7,8 @@ const {
   addPolicy,
   updatePolicy,
   deletePolicy,
+  deletePolicies,
+  setIncomeTreatment,
   restorePolicy,
   listPolicies,
   getPortfolioSummary,
@@ -377,4 +379,26 @@ test('initDb adds income_treatment to older databases, and only known values are
   assert.equal(updatePolicy(db, id, { income_treatment: 'non-cumulative' }), true);
   assert.throws(() => updatePolicy(db, id, { income_treatment: 'monthly' }), /CHECK constraint/);
   db.close();
+});
+
+test('deletePolicies soft-deletes every listed policy and counts only ones not already deleted', () => {
+  const db = initDb(':memory:');
+  const ids = ['A', 'B', 'C'].map((n) => addPolicy(db, { policyNumber: n, institution: 'HDFC', amountInvested: 1 }));
+  deletePolicy(db, ids[0]);
+
+  assert.equal(deletePolicies(db, ids.slice(0, 2)), 1, 'A was already deleted');
+  assert.deepEqual(listPolicies(db).map((p) => p.policy_number), ['C']);
+});
+
+test('setIncomeTreatment updates active policies only, and rejects unknown values without changing anything', () => {
+  const db = initDb(':memory:');
+  const [a, b, c] = ['A', 'B', 'C'].map((n) => addPolicy(db, { policyNumber: n, institution: 'HDFC', amountInvested: 1 }));
+  deletePolicy(db, c);
+
+  assert.equal(setIncomeTreatment(db, [a, b, c], 'non-cumulative'), 2, 'deleted C is left alone');
+  const byNumber = Object.fromEntries(listPolicies(db, { includeDeleted: true }).map((p) => [p.policy_number, p.income_treatment]));
+  assert.deepEqual(byNumber, { A: 'non-cumulative', B: 'non-cumulative', C: null });
+
+  assert.throws(() => setIncomeTreatment(db, [a], 'monthly'), /Unknown income treatment/);
+  assert.equal(listPolicies(db).find((p) => p.id === a).income_treatment, 'non-cumulative');
 });

@@ -109,6 +109,9 @@ async function start() {
   ipcMain.handle('policies:add', (_event, policy) => db.addPolicy(database, policy));
   ipcMain.handle('policies:update', (_event, { id, fields }) => db.updatePolicy(database, id, fields));
   ipcMain.handle('policies:delete', (_event, id) => db.deletePolicy(database, id));
+  ipcMain.handle('policies:deleteMany', (_event, ids) => db.deletePolicies(database, ids));
+  ipcMain.handle('policies:setIncomeTreatment', (_event, { ids, treatment }) =>
+    db.setIncomeTreatment(database, ids, treatment));
   ipcMain.handle('policies:restore', (_event, id) => db.restorePolicy(database, id));
   ipcMain.handle('portfolio:summary', (_event, opts) => db.getPortfolioSummary(database, opts));
 

@@ -13,22 +13,43 @@
     { value: 'holder', label: 'Holder' },
     { value: 'joint_holder', label: 'Joint holder' },
     { value: 'nominee', label: 'Nominee' },
-    { value: 'destination_bank', label: 'Destination bank' }
+    { value: 'destination_bank', label: 'Destination bank' },
+    // Matched on the whole value: a substring search for "cumulative" would also hit "non-cumulative".
+    { value: 'income_treatment', label: 'Income treatment', exact: true }
   ];
 
   const SEARCHABLE_KEYS = FILTERABLE_FIELDS.map((f) => f.value).filter((v) => v !== 'all');
+  const EXACT_KEYS = new Set(FILTERABLE_FIELDS.filter((f) => f.exact).map((f) => f.value));
+
+  const INCOME_TREATMENT_LABELS = { cumulative: 'Cumulative', 'non-cumulative': 'Non-cumulative' };
+
+  /** 'non-cumulative' → 'Non-cumulative'; not recorded (null) → 'Not recorded'. */
+  function incomeTreatmentLabel(value) {
+    return INCOME_TREATMENT_LABELS[value] ?? 'Not recorded';
+  }
+
+  /** A field's value as shown in the table, which is also what searches and suggestions use. */
+  function displayValue(p, key) {
+    if (key === 'income_treatment') return incomeTreatmentLabel(p.income_treatment);
+    return String(p[key] ?? '');
+  }
 
   /**
    * Case-insensitive substring match on one field, or across every
-   * filterable field when field is 'all'. A blank query returns the input.
+   * filterable field when field is 'all'. Fields marked exact must match
+   * the whole value. A blank query returns the input.
    */
   function filterPolicies(policies, field, query) {
     const needle = String(query ?? '').trim().toLowerCase();
     if (!needle) return policies;
 
     const keys = field === 'all' ? SEARCHABLE_KEYS : [field];
+    const exact = field !== 'all' && EXACT_KEYS.has(field);
     return policies.filter((p) =>
-      keys.some((key) => String(p[key] ?? '').toLowerCase().includes(needle))
+      keys.some((key) => {
+        const value = displayValue(p, key).toLowerCase();
+        return exact ? value === needle : value.includes(needle);
+      })
     );
   }
 
@@ -68,13 +89,21 @@
   function distinctValues(policies, field) {
     const values = new Set();
     for (const p of policies) {
-      const v = String(p[field] ?? '').trim();
+      const v = displayValue(p, field).trim();
       if (v) values.add(v);
     }
     return [...values].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
   }
 
-  const api = { FILTERABLE_FIELDS, filterPolicies, applyFilters, hasActiveFilter, distinctValues, fieldLabel };
+  const api = {
+    FILTERABLE_FIELDS,
+    filterPolicies,
+    applyFilters,
+    hasActiveFilter,
+    distinctValues,
+    fieldLabel,
+    incomeTreatmentLabel
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PolicyFilter = api;
 })(typeof window !== 'undefined' ? window : globalThis);

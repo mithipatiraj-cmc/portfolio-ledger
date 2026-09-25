@@ -423,6 +423,37 @@ tr.deleted td {
 
 tr.deleted td:last-child { text-decoration: none; }
 
+/* --- Row selection and bulk actions --- */
+th.select-col, td.select-col { width: 1%; padding-right: 0; }
+.select-col input { margin: 0; cursor: pointer; }
+tr.selected td { background: var(--hover); }
+.not-recorded { color: var(--faint); }
+
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+.bulk-bar[hidden] { display: none; }
+.bulk-count { font-weight: 600; font-size: 0.9rem; margin-right: 4px; }
+
+button.danger { background: var(--crit-bg); color: var(--crit-ink); border-color: transparent; }
+button.danger:hover { filter: brightness(0.96); }
+button.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  padding: 6px 4px;
+  margin-left: auto;
+}
+button.link-btn:hover { text-decoration: underline; }
+
 .restore-btn {
   background: var(--surface);
   color: var(--accent-text);

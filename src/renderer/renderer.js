@@ -1,6 +1,13 @@
 'use strict';
 
-const { FILTERABLE_FIELDS, applyFilters, hasActiveFilter, distinctValues, fieldLabel } = window.PolicyFilter;
+const {
+  FILTERABLE_FIELDS,
+  applyFilters,
+  hasActiveFilter,
+  distinctValues,
+  fieldLabel,
+  incomeTreatmentLabel
+} = window.PolicyFilter;
 const {
   CRITICAL_DAYS,
   roiPercent,
@@ -38,6 +45,13 @@ const chartTooltip = document.getElementById('chartTooltip');
 const backupBtn = document.getElementById('backupBtn');
 const restoreBtn = document.getElementById('restoreBtn');
 const themeSelect = document.getElementById('themeSelect');
+const selectAll = document.getElementById('selectAll');
+const bulkBar = document.getElementById('bulkBar');
+const bulkCount = document.getElementById('bulkCount');
+const bulkCumulativeBtn = document.getElementById('bulkCumulativeBtn');
+const bulkNonCumulativeBtn = document.getElementById('bulkNonCumulativeBtn');
+const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+const bulkClearBtn = document.getElementById('bulkClearBtn');
 
 const EDITABLE_COLUMNS = [
   { key: 'policy_number', dbField: 'policy_number' },
@@ -48,7 +62,8 @@ const EDITABLE_COLUMNS = [
   { key: 'amount_invested', dbField: 'amount_invested', numeric: true, format: formatAmountInput },
   { key: 'roi', dbField: 'roi', numeric: true, format: formatRoiInput },
   { key: 'maturity_date', dbField: 'maturity_date', badge: true },
-  { key: 'maturity_value', dbField: null, render: renderMaturityValueCell }
+  { key: 'maturity_value', dbField: null, render: renderMaturityValueCell },
+  { key: 'income_treatment', dbField: null, render: renderIncomeTreatmentCell }
 ];
 
 const UPCOMING_DAYS = CRITICAL_DAYS;
@@ -61,6 +76,9 @@ const inrCompact = new Intl.NumberFormat('en-IN', {
 let allPolicies = []; // last full fetch, before any filter is applied
 let sortState = { key: 'maturity_date', direction: 'asc' };
 let allocationGroup = 'institution';
+// Ids ticked for a bulk action. Only rows currently shown (and not deleted) can stay selected.
+const selectedIds = new Set();
+let selectableIds = [];
 
 // --- Filter bar setup ---
 for (const opt of FILTERABLE_FIELDS) {
@@ -85,7 +103,11 @@ function applyFilterAndRender() {
   if (upcomingOnly) filtered = filtered.filter((p) => !p.deleted_at && isMaturingWithin(p, UPCOMING_DAYS));
   renderSummary(summarizePolicies(filtered, { upcomingWithinDays: UPCOMING_DAYS }));
   renderAllocation(filtered);
+  selectableIds = filtered.filter((p) => !p.deleted_at).map((p) => p.id);
+  const shown = new Set(selectableIds);
+  for (const id of selectedIds) if (!shown.has(id)) selectedIds.delete(id); // hidden by a filter → never acted on
   renderTable(sortPolicies(filtered, sortState.key, sortState.direction));
+  renderSelection();
   renderSortIndicators();
   renderFilterChips();
   renderFilterSuggestions();
@@ -341,6 +363,22 @@ function renderTable(policies) {
       tr.title = `Deleted ${row.deleted_at} (UTC)`;
     }
 
+    const selectTd = el('td', 'select-col');
+    if (!isDeleted) {
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'row-select';
+      box.checked = selectedIds.has(row.id);
+      box.setAttribute('aria-label', `Select ${row.policy_number ?? 'policy'}`);
+      box.addEventListener('change', () => {
+        if (box.checked) selectedIds.add(row.id);
+        else selectedIds.delete(row.id);
+        renderSelection();
+      });
+      selectTd.appendChild(box);
+    }
+    tr.appendChild(selectTd);
+
     for (const col of EDITABLE_COLUMNS) {
       const td = document.createElement('td');
       if (col.numeric || col.key === 'maturity_value') td.classList.add('num');
@@ -454,6 +492,63 @@ async function onCellEdit(row, col, span) {
 function ipcErrorMessage(err) {
   return String(err?.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 }
+
+function renderIncomeTreatmentCell(td, row) {
+  td.textContent = incomeTreatmentLabel(row.income_treatment);
+  td.classList.add('lookup-cell');
+  if (!row.income_treatment) td.classList.add('not-recorded');
+}
+
+// --- Bulk actions on the ticked rows ---
+function renderSelection() {
+  const count = selectedIds.size;
+  bulkBar.hidden = count === 0;
+  bulkCount.textContent = `${count} selected`;
+  selectAll.checked = count > 0 && count === selectableIds.length;
+  selectAll.indeterminate = count > 0 && count < selectableIds.length;
+  selectAll.disabled = selectableIds.length === 0;
+  for (const tr of tableBody.querySelectorAll('tr')) {
+    tr.classList.toggle('selected', selectedIds.has(Number(tr.dataset.id)));
+  }
+}
+
+selectAll.addEventListener('change', () => {
+  if (selectAll.checked) selectableIds.forEach((id) => selectedIds.add(id));
+  else selectedIds.clear();
+  for (const box of tableBody.querySelectorAll('.row-select')) {
+    box.checked = selectedIds.has(Number(box.closest('tr').dataset.id));
+  }
+  renderSelection();
+});
+
+bulkClearBtn.addEventListener('click', () => {
+  selectedIds.clear();
+  applyFilterAndRender();
+});
+
+async function bulkSetIncomeTreatment(treatment) {
+  const ids = [...selectedIds];
+  try {
+    await window.api.setIncomeTreatment(ids, treatment);
+  } catch (err) {
+    alert(ipcErrorMessage(err));
+    return;
+  }
+  selectedIds.clear();
+  await refresh();
+}
+
+bulkCumulativeBtn.addEventListener('click', () => bulkSetIncomeTreatment('cumulative'));
+bulkNonCumulativeBtn.addEventListener('click', () => bulkSetIncomeTreatment('non-cumulative'));
+
+bulkDeleteBtn.addEventListener('click', async () => {
+  const ids = [...selectedIds];
+  const what = ids.length === 1 ? 'this policy' : `these ${ids.length} policies`;
+  if (!confirm(`Delete ${what}? You can restore them later via "Show deleted".`)) return;
+  await window.api.deletePolicies(ids);
+  selectedIds.clear();
+  await refresh();
+});
 
 function el(tag, className, text) {
   const node = document.createElement(tag);

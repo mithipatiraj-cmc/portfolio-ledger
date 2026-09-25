@@ -59,9 +59,18 @@
       <div id="allocationChart" class="bar-chart"></div>
     </section>
 
+    <div id="bulkBar" class="bulk-bar" role="region" aria-label="Bulk actions" hidden>
+      <span id="bulkCount" class="bulk-count" aria-live="polite"></span>
+      <button id="bulkCumulativeBtn" class="secondary">Mark cumulative</button>
+      <button id="bulkNonCumulativeBtn" class="secondary">Mark non-cumulative</button>
+      <button id="bulkDeleteBtn" class="danger">Delete</button>
+      <button id="bulkClearBtn" class="link-btn">Clear selection</button>
+    </div>
+
     <table id="policyTable">
       <thead>
         <tr>
+          <th class="select-col"><input id="selectAll" type="checkbox" aria-label="Select all policies shown"></th>
           <th data-sort="policy_number">Policy No</th>
           <th data-sort="instrument">Instrument</th>
           <th data-sort="institution">Institution</th>
@@ -71,6 +80,7 @@
           <th data-sort="roi" class="num">ROI %</th>
           <th data-sort="maturity_date">Maturity Date</th>
           <th data-sort="maturity_value" class="num">Maturity Value</th>
+          <th data-sort="income_treatment">Income</th>
           <th></th>
         </tr>
       </thead>

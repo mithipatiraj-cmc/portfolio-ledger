@@ -116,3 +116,22 @@ test('fieldLabel names chips the way the dropdown does', () => {
   assert.equal(fieldLabel('joint_holder'), 'Joint holder');
   assert.equal(fieldLabel('all'), 'Any field');
 });
+
+test('filterPolicies: income treatment matches the whole label, and blanks match "Not recorded"', () => {
+  const rows = [
+    { id: 1, income_treatment: 'cumulative' },
+    { id: 2, income_treatment: 'non-cumulative' },
+    { id: 3, income_treatment: null }
+  ];
+  const ids = (q) => filterPolicies(rows, 'income_treatment', q).map((r) => r.id);
+  assert.deepEqual(ids('Cumulative'), [1], '"cumulative" must not also match "non-cumulative"');
+  assert.deepEqual(ids('non-cumulative'), [2]);
+  assert.deepEqual(ids('not recorded'), [3]);
+  assert.deepEqual(ids('cumul'), [], 'no partial matches on an exact field');
+});
+
+test('distinctValues suggests income treatment labels, including "Not recorded"', () => {
+  const { distinctValues } = require('../src/renderer/filterPolicies.js');
+  const rows = [{ income_treatment: 'non-cumulative' }, { income_treatment: null }, { income_treatment: 'cumulative' }];
+  assert.deepEqual(distinctValues(rows, 'income_treatment'), ['Cumulative', 'Non-cumulative', 'Not recorded']);
+});

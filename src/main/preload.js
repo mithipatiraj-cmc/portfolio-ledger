@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
   addPolicy: (policy) => ipcRenderer.invoke('policies:add', policy),
   updatePolicy: (id, fields) => ipcRenderer.invoke('policies:update', { id, fields }),
   deletePolicy: (id) => ipcRenderer.invoke('policies:delete', id),
+  deletePolicies: (ids) => ipcRenderer.invoke('policies:deleteMany', ids),
+  setIncomeTreatment: (ids, treatment) => ipcRenderer.invoke('policies:setIncomeTreatment', { ids, treatment }),
   restorePolicy: (id) => ipcRenderer.invoke('policies:restore', id),
   getPortfolioSummary: (opts) => ipcRenderer.invoke('portfolio:summary', opts),
   importPreview: () => ipcRenderer.invoke('import:pickAndPreview'),

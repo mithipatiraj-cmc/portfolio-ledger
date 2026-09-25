@@ -322,6 +322,31 @@ function deletePolicy(db, id) {
   return Number(info.changes) > 0;
 }
 
+/** Run fn inside one transaction, so a bulk change applies to every row or none. */
+function inTransaction(db, fn) {
+  db.exec('BEGIN');
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+/** Soft-delete several policies at once. Returns how many were deleted (already-deleted ones don't count). */
+function deletePolicies(db, ids) {
+  return inTransaction(db, () => ids.filter((id) => deletePolicy(db, id)).length);
+}
+
+/** Set the income treatment of several active policies at once. Returns how many were updated. */
+function setIncomeTreatment(db, ids, treatment) {
+  if (!INCOME_TREATMENTS.includes(treatment)) throw new Error(`Unknown income treatment: ${treatment}`);
+  const update = db.prepare('UPDATE policies SET income_treatment = ? WHERE id = ? AND deleted_at IS NULL');
+  return inTransaction(db, () => ids.reduce((n, id) => n + Number(update.run(treatment, id).changes), 0));
+}
+
 function restorePolicy(db, id) {
   const info = db.prepare('UPDATE policies SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL').run(id);
   return Number(info.changes) > 0;
@@ -445,6 +470,8 @@ module.exports = {
   addPolicy,
   updatePolicy,
   deletePolicy,
+  deletePolicies,
+  setIncomeTreatment,
   restorePolicy,
   listPolicies,
   getPortfolioSummary,
