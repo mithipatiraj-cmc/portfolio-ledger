@@ -33,9 +33,16 @@
     },
     "mac": {
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
       ],
-      "category": "public.app-category.finance"
+      "category": "public.app-category.finance",
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "win": {
       "target": [
