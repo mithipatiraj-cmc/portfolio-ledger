@@ -28,6 +28,7 @@ const mappingModal = document.getElementById('mappingModal');
 const mappingRows = document.getElementById('mappingRows');
 const mappingCancelBtn = document.getElementById('mappingCancelBtn');
 const mappingCommitBtn = document.getElementById('mappingCommitBtn');
+const nonCumulativeCheck = document.getElementById('nonCumulativeCheck');
 const showDeleted = document.getElementById('showDeleted');
 const sheetPicker = document.getElementById('sheetPicker');
 const sheetSelect = document.getElementById('sheetSelect');
@@ -660,6 +661,7 @@ let currentImportSheet = null;
 
 function openMappingModal(preview) {
   currentImportFilePath = preview.filePath;
+  nonCumulativeCheck.checked = false; // chosen fresh for each file
 
   // Sheet picker: only shown when the workbook has more than one sheet.
   sheetSelect.innerHTML = '';
@@ -732,7 +734,8 @@ mappingCommitBtn.addEventListener('click', async () => {
     columnMapping[select.dataset.colIndex] = select.value; // '' means "ignore this column"
   });
 
-  const result = await window.api.importCommit(currentImportFilePath, currentImportSheet, columnMapping);
+  const incomeTreatment = nonCumulativeCheck.checked ? 'non-cumulative' : 'cumulative';
+  const result = await window.api.importCommit(currentImportFilePath, currentImportSheet, columnMapping, incomeTreatment);
   closeMappingModal();
 
   let msg = `Import complete: ${result.added} added, ${result.updated} updated, ${result.skipped} unchanged.`;

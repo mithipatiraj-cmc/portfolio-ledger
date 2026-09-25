@@ -11,8 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   getPortfolioSummary: (opts) => ipcRenderer.invoke('portfolio:summary', opts),
   importPreview: () => ipcRenderer.invoke('import:pickAndPreview'),
   importPreviewSheet: (filePath, sheetName) => ipcRenderer.invoke('import:previewSheet', { filePath, sheetName }),
-  importCommit: (filePath, sheetName, columnMapping) =>
-    ipcRenderer.invoke('import:commitWithMapping', { filePath, sheetName, columnMapping }),
+  importCommit: (filePath, sheetName, columnMapping, incomeTreatment) =>
+    ipcRenderer.invoke('import:commitWithMapping', { filePath, sheetName, columnMapping, incomeTreatment }),
   backupDb: () => ipcRenderer.invoke('db:backup'),
   restoreDb: () => ipcRenderer.invoke('db:restore'),
   getReminderSettings: () => ipcRenderer.invoke('reminders:get'),

@@ -89,6 +89,13 @@
         <select id="sheetSelect"></select>
       </div>
       <div id="mappingRows" class="mapping-rows"></div>
+      <label class="check-row income-treatment">
+        <input id="nonCumulativeCheck" type="checkbox">
+        <span>
+          Policies in this file are non-cumulative
+          <span class="check-hint">Interest is paid out as it's earned. Leave unticked for cumulative (interest reinvested until maturity).</span>
+        </span>
+      </label>
       <div class="modal-actions">
         <button id="mappingCancelBtn" class="secondary">Cancel</button>
         <button id="mappingCommitBtn">Import</button>

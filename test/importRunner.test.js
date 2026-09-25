@@ -191,3 +191,27 @@ test('commitImport: a destination bank with no account column imports and reuses
   const destinations = database.prepare('SELECT bank, account FROM destinations').all();
   assert.deepEqual(destinations.map((d) => ({ ...d })), [{ bank: 'ICICI', account: null }]);
 });
+
+test('commitImport: the chosen income treatment is saved on every row, and a re-import can change it', () => {
+  const database = dbModule.initDb(':memory:');
+  const buffer = buildWorkbookBuffer([row({ policyNumber: 'FD-001' }), row({ policyNumber: 'FD-002' })]);
+
+  const first = commitImport(database, dbModule, buffer, { incomeTreatment: 'cumulative' });
+  assert.equal(first.added, 2);
+  assert.deepEqual(dbModule.listPolicies(database).map((p) => p.income_treatment), ['cumulative', 'cumulative']);
+
+  const same = commitImport(database, dbModule, buffer, { incomeTreatment: 'cumulative' });
+  assert.equal(same.skipped, 2, 'same file and same choice: nothing to change');
+
+  const switched = commitImport(database, dbModule, buffer, { incomeTreatment: 'non-cumulative' });
+  assert.equal(switched.updated, 2);
+  assert.deepEqual(dbModule.listPolicies(database).map((p) => p.income_treatment), ['non-cumulative', 'non-cumulative']);
+});
+
+test('commitImport: an unknown income treatment is rejected before anything is written', () => {
+  const database = dbModule.initDb(':memory:');
+  const buffer = buildWorkbookBuffer([row({ policyNumber: 'FD-001' })]);
+
+  assert.throws(() => commitImport(database, dbModule, buffer, { incomeTreatment: 'monthly' }), /Unknown income treatment/);
+  assert.equal(dbModule.listPolicies(database).length, 0);
+});

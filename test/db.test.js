@@ -356,3 +356,25 @@ test('reminder log records sent reminders once and is cleared by recreateDbSchem
   recreateDbSchema(db);
   assert.equal(listSentReminders(db).size, 0);
 });
+
+test('initDb adds income_treatment to older databases, and only known values are accepted', () => {
+  const path = require('node:path');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const { DatabaseSync } = require('node:sqlite');
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pl-')), 'noincome.sqlite');
+
+  const old = new DatabaseSync(dbPath);
+  old.exec('CREATE TABLE policies (id INTEGER PRIMARY KEY, policy_number TEXT UNIQUE, amount_invested REAL, deleted_at TEXT);');
+  old.exec("INSERT INTO policies (policy_number, amount_invested) VALUES ('FD-OLD', 1);");
+  old.close();
+
+  const db = initDb(dbPath);
+  const [existing] = db.prepare('SELECT income_treatment FROM policies').all();
+  assert.equal(existing.income_treatment, null, 'existing policies are left unrecorded');
+
+  const id = db.prepare('SELECT id FROM policies').get().id;
+  assert.equal(updatePolicy(db, id, { income_treatment: 'non-cumulative' }), true);
+  assert.throws(() => updatePolicy(db, id, { income_treatment: 'monthly' }), /CHECK constraint/);
+  db.close();
+});

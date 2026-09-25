@@ -3,9 +3,10 @@
 const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 const { toTitleCase } = require('../shared/nameCase.js');
-const { isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
+const { INCOME_TREATMENTS, isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
 
 const FD_MATURITY_ERROR = 'Maturity date is required for fixed deposits.';
+const INCOME_TREATMENT_CHECK = `CHECK (income_treatment IN (${INCOME_TREATMENTS.map((t) => `'${t}'`).join(', ')}))`;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS institutions (
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS policies (
   joint_holder_id INTEGER REFERENCES people(id),
   nominee_id INTEGER REFERENCES people(id),
   destination_id INTEGER REFERENCES destinations(id),
+  income_treatment TEXT ${INCOME_TREATMENT_CHECK}, -- NULL = not recorded
   deleted_at TEXT -- soft delete: set when the user deletes, NULL while active
 );
 
@@ -84,6 +86,9 @@ function migrate(db) {
   }
   if (!policyColumns.includes('deleted_at')) {
     db.exec('ALTER TABLE policies ADD COLUMN deleted_at TEXT;');
+  }
+  if (!policyColumns.includes('income_treatment')) {
+    db.exec(`ALTER TABLE policies ADD COLUMN income_treatment TEXT ${INCOME_TREATMENT_CHECK};`);
   }
   normalizeLookupNames(db);
 }
@@ -256,8 +261,8 @@ function addPolicy(db, p) {
       `INSERT INTO policies (
         policy_number, instrument, start_date, maturity_date, term_total,
         amount_invested, roi, compounding_periods_per_year, maturity_amount,
-        institution_id, holder_id, joint_holder_id, nominee_id, destination_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        institution_id, holder_id, joint_holder_id, nominee_id, destination_id, income_treatment
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       p.policyNumber ?? null,
@@ -273,7 +278,8 @@ function addPolicy(db, p) {
       holderId,
       jointHolderId,
       nomineeId,
-      destinationId
+      destinationId,
+      p.incomeTreatment ?? null
     );
   return Number(info.lastInsertRowid);
 }
@@ -281,7 +287,7 @@ function addPolicy(db, p) {
 function updatePolicy(db, id, fields) {
   const allowed = [
     'policy_number', 'instrument', 'start_date', 'maturity_date', 'term_total',
-    'amount_invested', 'roi', 'compounding_periods_per_year', 'maturity_amount'
+    'amount_invested', 'roi', 'compounding_periods_per_year', 'maturity_amount', 'income_treatment'
   ];
   const sets = [];
   const values = [];
@@ -330,7 +336,7 @@ function listPolicies(db, { includeDeleted = false } = {}) {
     .prepare(
       `SELECT
         p.id, p.policy_number, p.instrument, p.start_date, p.maturity_date, p.term_total,
-        p.amount_invested, p.roi, p.compounding_periods_per_year, p.maturity_amount, p.deleted_at,
+        p.amount_invested, p.roi, p.compounding_periods_per_year, p.maturity_amount, p.income_treatment, p.deleted_at,
         i.name AS institution, i.branch AS branch,
         h.name AS holder, jh.name AS joint_holder, n.name AS nominee,
         d.bank AS destination_bank, d.account AS destination_account

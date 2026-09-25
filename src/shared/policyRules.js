@@ -11,8 +11,11 @@ function isMaturityDateRequired(instrument) {
   return isFixedDeposit(instrument);
 }
 
+/** How a policy's interest is handled: reinvested until maturity, or paid out as it's earned. */
+const INCOME_TREATMENTS = ['cumulative', 'non-cumulative'];
+
 function isBlank(value) {
   return value === null || value === undefined || String(value).trim() === '';
 }
 
-module.exports = { isFixedDeposit, isMaturityDateRequired, isBlank };
+module.exports = { INCOME_TREATMENTS, isFixedDeposit, isMaturityDateRequired, isBlank };

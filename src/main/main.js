@@ -134,9 +134,9 @@ async function start() {
   });
 
   // Step 2: user confirms (or adjusts) the mapping; we re-read the same file and commit.
-  ipcMain.handle('import:commitWithMapping', (_event, { filePath, sheetName, columnMapping }) => {
+  ipcMain.handle('import:commitWithMapping', (_event, { filePath, sheetName, columnMapping, incomeTreatment }) => {
     const buffer = fs.readFileSync(filePath);
-    return commitImport(database, db, buffer, { sheetName, columnMapping });
+    return commitImport(database, db, buffer, { sheetName, columnMapping, incomeTreatment });
   });
 
   // --- Backup & restore ---

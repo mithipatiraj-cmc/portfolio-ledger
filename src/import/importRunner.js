@@ -1,6 +1,7 @@
 'use strict';
 
 const { parseWorkbook, classifyForImport } = require('./excelImport.js');
+const { INCOME_TREATMENTS } = require('../shared/policyRules.js');
 
 /** DB row (snake_case, from listPolicies) → the camelCase shape parsed rows use, for comparison. */
 function toComparableShape(dbRow) {
@@ -20,7 +21,8 @@ function toComparableShape(dbRow) {
     jointHolder: dbRow.joint_holder,
     nominee: dbRow.nominee,
     destinationBank: dbRow.destination_bank,
-    destinationAccount: dbRow.destination_account
+    destinationAccount: dbRow.destination_account,
+    incomeTreatment: dbRow.income_treatment
   };
 }
 
@@ -37,9 +39,18 @@ function toComparableShape(dbRow) {
  * @param {Object<number,string>} [opts.columnMapping] - optional manual column
  *   mapping, passed straight through to parseWorkbook — lets a sheet with
  *   different column names import correctly instead of failing auto-detection.
+ * @param {'cumulative'|'non-cumulative'} [opts.incomeTreatment] - applied to
+ *   every row in the file, chosen by the user in the import dialog.
  */
 function commitImport(database, dbModule, buffer, opts = {}) {
+  const { incomeTreatment } = opts;
+  if (incomeTreatment !== undefined && !INCOME_TREATMENTS.includes(incomeTreatment)) {
+    throw new Error(`Unknown income treatment: ${incomeTreatment}`);
+  }
   const { rows, unmappedHeaders } = parseWorkbook(buffer, opts);
+  if (incomeTreatment) {
+    for (const row of rows) row.data.incomeTreatment = incomeTreatment;
+  }
 
   const existingRows = dbModule.listPolicies(database, { includeDeleted: true });
   const existingByPolicyNumber = new Map(
@@ -80,7 +91,8 @@ function commitImport(database, dbModule, buffer, opts = {}) {
         amount_invested: row.data.amountInvested,
         roi: row.data.roi,
         compounding_periods_per_year: row.data.compoundingPeriodsPerYear,
-        maturity_amount: row.data.maturityAmount
+        maturity_amount: row.data.maturityAmount,
+        ...(incomeTreatment && { income_treatment: incomeTreatment })
       });
       result.updated++;
     }
