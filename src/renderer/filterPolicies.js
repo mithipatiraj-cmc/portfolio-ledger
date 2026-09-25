@@ -32,7 +32,34 @@
     );
   }
 
-  const api = { FILTERABLE_FIELDS, filterPolicies };
+  /**
+   * Apply several filters at once: a row must match every one (AND).
+   * filters: [{ field, query }, …]; blank queries are ignored.
+   */
+  function applyFilters(policies, filters) {
+    return filters.reduce((rows, { field, query }) => filterPolicies(rows, field, query), policies);
+  }
+
+  /** True when at least one filter has a non-blank query. */
+  function hasActiveFilter(filters) {
+    return filters.some(({ query }) => String(query ?? '').trim() !== '');
+  }
+
+  /**
+   * Sorted distinct non-blank values of field, for a filter's suggestion list.
+   * Pass the rows left after the *other* filters so suggestions narrow as you
+   * filter (e.g. only holders at the chosen institution).
+   */
+  function distinctValues(policies, field) {
+    const values = new Set();
+    for (const p of policies) {
+      const v = String(p[field] ?? '').trim();
+      if (v) values.add(v);
+    }
+    return [...values].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }
+
+  const api = { FILTERABLE_FIELDS, filterPolicies, applyFilters, hasActiveFilter, distinctValues };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PolicyFilter = api;
 })(typeof window !== 'undefined' ? window : globalThis);

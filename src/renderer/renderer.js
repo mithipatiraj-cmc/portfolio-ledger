@@ -1,6 +1,6 @@
 'use strict';
 
-const { FILTERABLE_FIELDS, filterPolicies } = window.PolicyFilter;
+const { FILTERABLE_FIELDS, applyFilters, hasActiveFilter, distinctValues } = window.PolicyFilter;
 const {
   CRITICAL_DAYS,
   roiPercent,
@@ -20,6 +20,8 @@ const filterField = document.getElementById('filterField');
 const filterQuery = document.getElementById('filterQuery');
 const clearFilterBtn = document.getElementById('clearFilterBtn');
 const filterCount = document.getElementById('filterCount');
+const institutionFilter = document.getElementById('institutionFilter');
+const holderFilter = document.getElementById('holderFilter');
 const mappingModal = document.getElementById('mappingModal');
 const mappingRows = document.getElementById('mappingRows');
 const mappingCancelBtn = document.getElementById('mappingCancelBtn');
@@ -65,21 +67,42 @@ for (const opt of FILTERABLE_FIELDS) {
   filterField.appendChild(el);
 }
 
+// Every filter in the bar; a row must match all of them. The free-text box
+// searches the field chosen in the dropdown; the others are fixed fields.
+const FILTER_INPUTS = [
+  { input: filterQuery, field: () => filterField.value },
+  { input: institutionFilter, field: () => 'institution', suggestions: document.getElementById('institutionOptions') },
+  { input: holderFilter, field: () => 'holder', suggestions: document.getElementById('holderOptions') }
+];
+
+const currentFilters = (except) =>
+  FILTER_INPUTS.filter((f) => f !== except).map((f) => ({ field: f.field(), query: f.input.value }));
+
 function applyFilterAndRender() {
-  const filtered = filterPolicies(allPolicies, filterField.value, filterQuery.value);
+  const filters = currentFilters();
+  const filtered = applyFilters(allPolicies, filters);
   renderSummary(summarizePolicies(filtered, { upcomingWithinDays: UPCOMING_DAYS }));
   renderAllocation(filtered);
   renderTable(sortPolicies(filtered, sortState.key, sortState.direction));
   renderSortIndicators();
-  filterCount.textContent = filterQuery.value.trim()
-    ? `${filtered.length} of ${allPolicies.length} shown`
-    : '';
+  renderFilterSuggestions();
+  for (const f of FILTER_INPUTS) f.input.classList.toggle('active', f.input.value.trim() !== '');
+  filterCount.textContent = hasActiveFilter(filters) ? `${filtered.length} of ${allPolicies.length} shown` : '';
+}
+
+/** Suggest values from the rows the *other* filters leave, so choices narrow as you filter. */
+function renderFilterSuggestions() {
+  for (const f of FILTER_INPUTS) {
+    if (!f.suggestions) continue;
+    const rows = applyFilters(allPolicies, currentFilters(f));
+    f.suggestions.replaceChildren(...distinctValues(rows, f.field()).map((v) => Object.assign(document.createElement('option'), { value: v })));
+  }
 }
 
 filterField.addEventListener('change', applyFilterAndRender);
-filterQuery.addEventListener('input', applyFilterAndRender);
+for (const f of FILTER_INPUTS) f.input.addEventListener('input', applyFilterAndRender);
 clearFilterBtn.addEventListener('click', () => {
-  filterQuery.value = '';
+  for (const f of FILTER_INPUTS) f.input.value = '';
   filterField.value = 'all';
   applyFilterAndRender();
 });

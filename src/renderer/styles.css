@@ -298,12 +298,17 @@ tbody tr:hover { background: var(--hover); }
 /* --- Filter bar --- */
 .filter-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-bottom: 16px;
 }
 
-.filter-bar input { flex: 1; max-width: 280px; }
+.filter-bar input { flex: 1; min-width: 140px; max-width: 260px; }
+.filter-bar input.field-filter { max-width: 200px; }
+
+/* A filter that's narrowing the list gets an accent outline, so it's obvious what's applied. */
+.filter-bar input.active { border-color: var(--accent-text); box-shadow: 0 0 0 1px var(--accent-text); }
 
 .filter-count { color: var(--muted); font-size: 0.82rem; }
 

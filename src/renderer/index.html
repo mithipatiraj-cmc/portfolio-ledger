@@ -35,10 +35,16 @@
       <button id="importBtn">Import from Excel</button>
       <label class="toggle"><input id="showDeleted" type="checkbox"> Show deleted</label>
     </div>
-    <div class="filter-bar">
-      <select id="filterField"></select>
-      <input id="filterQuery" type="search" placeholder="Filter…">
-      <button id="clearFilterBtn" class="secondary">Clear</button>
+    <div class="filter-bar" role="search">
+      <select id="filterField" aria-label="Search in"></select>
+      <input id="filterQuery" type="search" placeholder="Search…" aria-label="Search text">
+      <input id="institutionFilter" class="field-filter" type="search" list="institutionOptions"
+             placeholder="Institution" aria-label="Filter by institution" autocomplete="off">
+      <datalist id="institutionOptions"></datalist>
+      <input id="holderFilter" class="field-filter" type="search" list="holderOptions"
+             placeholder="Holder" aria-label="Filter by holder" autocomplete="off">
+      <datalist id="holderOptions"></datalist>
+      <button id="clearFilterBtn" class="secondary">Clear filters</button>
       <span id="filterCount" class="filter-count"></span>
     </div>
 
