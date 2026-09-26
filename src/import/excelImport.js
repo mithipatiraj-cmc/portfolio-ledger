@@ -206,10 +206,6 @@ function validateRow(data) {
   if (isMaturityDateRequired(data.instrument) && isBlank(data.maturityDate)) {
     errors.push('Missing required field: maturityDate (required for fixed deposits)');
   }
-  if (data.startDate !== undefined && data.startDate === null) {
-    // startDate isn't required, so a null here (given raw input existed) would've
-    // come from an unparseable value — caller can inspect data vs. raw if needed.
-  }
   for (const field of NUMERIC_FIELDS) {
     if (data[field] !== null && data[field] !== undefined && Number.isNaN(data[field])) {
       errors.push(`Invalid number: ${field}`);

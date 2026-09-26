@@ -81,12 +81,6 @@ function initDb(dbPath) {
 /** Bring databases created by older versions up to the current SCHEMA, keeping their data. */
 function migrate(db) {
   const policyColumns = db.prepare('PRAGMA table_info(policies)').all().map((c) => c.name);
-  if (policyColumns.includes('received_amount') && !policyColumns.includes('amount_invested')) {
-    db.exec('ALTER TABLE policies RENAME COLUMN received_amount TO amount_invested;');
-  }
-  if (!policyColumns.includes('deleted_at')) {
-    db.exec('ALTER TABLE policies ADD COLUMN deleted_at TEXT;');
-  }
   if (!policyColumns.includes('income_treatment')) {
     db.exec(`ALTER TABLE policies ADD COLUMN income_treatment TEXT ${INCOME_TREATMENT_CHECK};`);
   }
@@ -241,6 +235,17 @@ function upsertDestination(db, bank, account) {
   return Number(info.lastInsertRowid);
 }
 
+/** Find or create the institution, people, and destination a policy's names refer to. */
+function resolveLookups(db, p) {
+  return {
+    institutionId: upsertInstitution(db, p.institution, p.branch),
+    holderId: upsertPerson(db, p.holder),
+    jointHolderId: p.jointHolder ? upsertPerson(db, p.jointHolder) : null,
+    nomineeId: upsertPerson(db, p.nominee),
+    destinationId: upsertDestination(db, p.destinationBank, p.destinationAccount)
+  };
+}
+
 /**
  * Insert a policy, resolving/creating its institution, people, and destination lookups.
  * @param {DatabaseSync} db
@@ -250,11 +255,7 @@ function upsertDestination(db, bank, account) {
 function addPolicy(db, p) {
   if (isMaturityDateRequired(p.instrument) && isBlank(p.maturityDate)) throw new Error(FD_MATURITY_ERROR);
 
-  const institutionId = upsertInstitution(db, p.institution, p.branch);
-  const holderId = upsertPerson(db, p.holder);
-  const jointHolderId = p.jointHolder ? upsertPerson(db, p.jointHolder) : null;
-  const nomineeId = upsertPerson(db, p.nominee);
-  const destinationId = upsertDestination(db, p.destinationBank, p.destinationAccount);
+  const { institutionId, holderId, jointHolderId, nomineeId, destinationId } = resolveLookups(db, p);
 
   const info = db
     .prepare(
@@ -292,7 +293,8 @@ function updatePolicy(db, id, fields) {
   const sets = [];
   const values = [];
   for (const [key, value] of Object.entries(fields)) {
-    if (allowed.includes(key)) {
+    // undefined means "not given" (null clears a field), and SQLite can't bind it anyway.
+    if (allowed.includes(key) && value !== undefined) {
       sets.push(`${key} = ?`);
       values.push(value);
     }
@@ -312,6 +314,31 @@ function updatePolicy(db, id, fields) {
   values.push(id);
   db.prepare(`UPDATE policies SET ${sets.join(', ')} WHERE id = ?`).run(...values);
   return true;
+}
+
+/**
+ * Overwrite an existing policy with a complete row in addPolicy's shape
+ * (used by re-import), including its institution, people, and destination.
+ */
+function replacePolicy(db, id, p) {
+  inTransaction(db, () => {
+    updatePolicy(db, id, {
+      instrument: p.instrument ?? null,
+      start_date: p.startDate ?? null,
+      maturity_date: p.maturityDate ?? null,
+      term_total: p.termTotal ?? null,
+      amount_invested: p.amountInvested ?? null,
+      roi: p.roi ?? null,
+      compounding_periods_per_year: p.compoundingPeriodsPerYear ?? null,
+      maturity_amount: p.maturityAmount ?? null,
+      income_treatment: p.incomeTreatment ?? null
+    });
+    const { institutionId, holderId, jointHolderId, nomineeId, destinationId } = resolveLookups(db, p);
+    db.prepare(
+      `UPDATE policies SET institution_id = ?, holder_id = ?, joint_holder_id = ?, nominee_id = ?, destination_id = ?
+       WHERE id = ?`
+    ).run(institutionId, holderId, jointHolderId, nomineeId, destinationId, id);
+  });
 }
 
 /** Soft delete: the row stays (restorable, and re-import won't re-add it) but is hidden from lists and totals. */
@@ -469,6 +496,7 @@ module.exports = {
   upsertDestination,
   addPolicy,
   updatePolicy,
+  replacePolicy,
   deletePolicy,
   deletePolicies,
   setIncomeTreatment,

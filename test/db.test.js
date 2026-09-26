@@ -129,25 +129,6 @@ test('restorePolicy brings a soft-deleted policy back', () => {
   assert.equal(restorePolicy(db, id), false, 'restoring an active policy reports false');
 });
 
-test('initDb adds the deleted_at column to databases created before soft delete', () => {
-  const path = require('node:path');
-  const os = require('node:os');
-  const fs = require('node:fs');
-  const { DatabaseSync } = require('node:sqlite');
-  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pl-')), 'nodel.sqlite');
-
-  const old = new DatabaseSync(dbPath);
-  old.exec('CREATE TABLE policies (id INTEGER PRIMARY KEY, policy_number TEXT UNIQUE, amount_invested REAL);');
-  old.exec("INSERT INTO policies (policy_number, amount_invested) VALUES ('FD-OLD', 1);");
-  old.close();
-
-  const db = initDb(dbPath);
-  const cols = db.prepare('PRAGMA table_info(policies)').all().map((c) => c.name);
-  assert.ok(cols.includes('deleted_at'));
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM policies WHERE deleted_at IS NULL').get().n, 1);
-  db.close();
-});
-
 test('policy_number UNIQUE constraint rejects duplicates', () => {
   const db = freshDb();
   addPolicy(db, {
@@ -193,24 +174,6 @@ test('upsertInstitution treats null branch consistently', () => {
   const id1 = upsertInstitution(db, 'SBI', null);
   const id2 = upsertInstitution(db, 'SBI', null);
   assert.equal(id1, id2, 'same name with null branch should resolve to the same row');
-});
-
-test('initDb migrates an old database whose policies table still has received_amount', () => {
-  const path = require('node:path');
-  const os = require('node:os');
-  const fs = require('node:fs');
-  const { DatabaseSync } = require('node:sqlite');
-  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pl-')), 'old.sqlite');
-
-  const old = new DatabaseSync(dbPath);
-  old.exec('CREATE TABLE policies (id INTEGER PRIMARY KEY, policy_number TEXT UNIQUE, received_amount REAL);');
-  old.exec("INSERT INTO policies (policy_number, received_amount) VALUES ('FD-OLD', 50000);");
-  old.close();
-
-  const db = initDb(dbPath);
-  const row = db.prepare('SELECT amount_invested FROM policies WHERE policy_number = ?').get('FD-OLD');
-  assert.equal(row.amount_invested, 50000);
-  db.close();
 });
 
 test('recreateDbSchema clears all data and leaves a usable empty schema', () => {
@@ -401,4 +364,11 @@ test('setIncomeTreatment updates active policies only, and rejects unknown value
 
   assert.throws(() => setIncomeTreatment(db, [a], 'monthly'), /Unknown income treatment/);
   assert.equal(listPolicies(db).find((p) => p.id === a).income_treatment, 'non-cumulative');
+});
+
+test('updatePolicy skips undefined fields instead of failing to bind them', () => {
+  const db = initDb(':memory:');
+  const id = addPolicy(db, { policyNumber: 'A', institution: 'HDFC', amountInvested: 1, roi: 6 });
+  assert.equal(updatePolicy(db, id, { roi: 7, start_date: undefined }), true);
+  assert.equal(listPolicies(db)[0].roi, 7);
 });

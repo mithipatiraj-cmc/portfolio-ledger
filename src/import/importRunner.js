@@ -82,18 +82,10 @@ function commitImport(database, dbModule, buffer, opts = {}) {
       continue;
     }
     if (row.status === 'duplicate-changed') {
-      const existing = existingByPolicyNumber.get(row.data.policyNumber);
-      dbModule.updatePolicy(database, existing.id, {
-        instrument: row.data.instrument,
-        start_date: row.data.startDate,
-        maturity_date: row.data.maturityDate,
-        term_total: row.data.termTotal,
-        amount_invested: row.data.amountInvested,
-        roi: row.data.roi,
-        compounding_periods_per_year: row.data.compoundingPeriodsPerYear,
-        maturity_amount: row.data.maturityAmount,
-        ...(incomeTreatment && { income_treatment: incomeTreatment })
-      });
+      const { id, ...stored } = existingByPolicyNumber.get(row.data.policyNumber);
+      // Columns the sheet doesn't have (or that were set to ignore) keep their stored values.
+      const fromFile = Object.fromEntries(Object.entries(row.data).filter(([, v]) => v !== undefined));
+      dbModule.replacePolicy(database, id, { ...stored, ...fromFile });
       result.updated++;
     }
   }

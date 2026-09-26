@@ -215,3 +215,33 @@ test('commitImport: an unknown income treatment is rejected before anything is w
   assert.throws(() => commitImport(database, dbModule, buffer, { incomeTreatment: 'monthly' }), /Unknown income treatment/);
   assert.equal(dbModule.listPolicies(database).length, 0);
 });
+
+test('commitImport: a re-import that changes institution, holder or destination saves the new names', () => {
+  const database = dbModule.initDb(':memory:');
+  commitImport(database, dbModule, buildWorkbookBuffer([row({ institution: 'HDFC', holder: 'Ravi', destinationBank: 'ICICI' })]));
+
+  const changed = buildWorkbookBuffer([row({ institution: 'SBI', holder: 'Priya', destinationBank: 'Axis' })]);
+  const first = commitImport(database, dbModule, changed);
+  const second = commitImport(database, dbModule, changed);
+
+  assert.equal(first.updated, 1);
+  assert.equal(second.skipped, 1, 'once saved, the same file is unchanged, not "updated" again');
+  const [p] = dbModule.listPolicies(database);
+  assert.deepEqual([p.institution, p.holder, p.destination_bank], ['SBI', 'Priya', 'Axis']);
+});
+
+test('commitImport: re-importing a changed policy from a sheet with a column ignored keeps that stored value', () => {
+  const database = dbModule.initDb(':memory:');
+  commitImport(database, dbModule, buildWorkbookBuffer([row({ roi: 6.5, startDate: '2024-01-01' })]), { incomeTreatment: 'non-cumulative' });
+
+  const startCol = HEADERS.indexOf('Date of taking the policy');
+  const result = commitImport(database, dbModule, buildWorkbookBuffer([row({ roi: 7.25 })]), {
+    columnMapping: { [startCol]: '' }
+  });
+
+  assert.equal(result.updated, 1);
+  const [p] = dbModule.listPolicies(database);
+  assert.equal(p.roi, 7.25);
+  assert.equal(p.start_date, '2024-01-01', 'ignored column left as it was');
+  assert.equal(p.income_treatment, 'non-cumulative', 'no choice made this time, so the stored one stays');
+});
