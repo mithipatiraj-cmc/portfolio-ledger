@@ -9,6 +9,7 @@ const {
   deletePolicy,
   deletePolicies,
   setIncomeTreatment,
+  setTaxTreatment,
   restorePolicy,
   listPolicies,
   getPortfolioSummary,
@@ -371,4 +372,13 @@ test('updatePolicy skips undefined fields instead of failing to bind them', () =
   const id = addPolicy(db, { policyNumber: 'A', institution: 'HDFC', amountInvested: 1, roi: 6 });
   assert.equal(updatePolicy(db, id, { roi: 7, start_date: undefined }), true);
   assert.equal(listPolicies(db)[0].roi, 7);
+});
+
+test('setTaxTreatment tags active policies as exempt or taxable; untagged policies stay NULL', () => {
+  const db = initDb(':memory:');
+  const [a, b] = ['A', 'B'].map((n) => addPolicy(db, { policyNumber: n, institution: 'HDFC', amountInvested: 1 }));
+  assert.equal(setTaxTreatment(db, [a], 'exempt'), 1);
+  assert.deepEqual(listPolicies(db).map((p) => p.tax_treatment), ['exempt', null]);
+  assert.equal(setTaxTreatment(db, [a], 'taxable'), 1);
+  assert.throws(() => setTaxTreatment(db, [b], 'partly'), /Unknown tax treatment/);
 });

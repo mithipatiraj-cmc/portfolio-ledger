@@ -213,7 +213,9 @@
   const api = {
     WARNING_DAYS,
     CRITICAL_DAYS,
+    DAY_MS,
     toISODate,
+    dayValue,
     roiPercent,
     parseTermYears,
     termYears,

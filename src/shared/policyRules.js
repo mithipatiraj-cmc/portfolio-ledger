@@ -14,8 +14,11 @@ function isMaturityDateRequired(instrument) {
 /** How a policy's interest is handled: reinvested until maturity, or paid out as it's earned. */
 const INCOME_TREATMENTS = ['cumulative', 'non-cumulative'];
 
+/** Whether a policy's interest is taxed. Untagged (NULL) policies count as taxable. */
+const TAX_TREATMENTS = ['taxable', 'exempt'];
+
 function isBlank(value) {
   return value === null || value === undefined || String(value).trim() === '';
 }
 
-module.exports = { INCOME_TREATMENTS, isFixedDeposit, isMaturityDateRequired, isBlank };
+module.exports = { INCOME_TREATMENTS, TAX_TREATMENTS, isFixedDeposit, isMaturityDateRequired, isBlank };

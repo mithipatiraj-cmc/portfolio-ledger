@@ -45,6 +45,18 @@ function resetDbIfRequested(dbPath) {
   console.log('DB_RESET: database schema recreated (all data cleared).');
 }
 
+const TAX_SETTINGS_KEY = 'tax';
+
+/** Keep only non-negative numbers: { rebateLimit, holders: { [name]: { rate, otherIncome } } }. */
+function normalizeTaxSettings(input) {
+  const amount = (v) => (v === null || v === '' || !(Number(v) >= 0) ? null : Number(v));
+  const holders = {};
+  for (const [name, h] of Object.entries(input?.holders ?? {})) {
+    holders[name] = { rate: amount(h?.rate), otherIncome: amount(h?.otherIncome) };
+  }
+  return { rebateLimit: amount(input?.rebateLimit), holders };
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1100,
@@ -112,6 +124,15 @@ async function start() {
   ipcMain.handle('policies:deleteMany', (_event, ids) => db.deletePolicies(database, ids));
   ipcMain.handle('policies:setIncomeTreatment', (_event, { ids, treatment }) =>
     db.setIncomeTreatment(database, ids, treatment));
+  ipcMain.handle('policies:setTaxTreatment', (_event, { ids, treatment }) =>
+    db.setTaxTreatment(database, ids, treatment));
+
+  // --- Tax projection inputs: the rebate limit plus each holder's rate and other income ---
+  ipcMain.handle('tax:getSettings', () => db.getSetting(database, TAX_SETTINGS_KEY, {}));
+  ipcMain.handle('tax:saveSettings', (_event, settings) => {
+    db.setSetting(database, TAX_SETTINGS_KEY, normalizeTaxSettings(settings));
+    return db.getSetting(database, TAX_SETTINGS_KEY);
+  });
   ipcMain.handle('policies:restore', (_event, id) => db.restorePolicy(database, id));
   ipcMain.handle('portfolio:summary', (_event, opts) => db.getPortfolioSummary(database, opts));
 

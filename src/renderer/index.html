@@ -14,7 +14,13 @@
 </head>
 <body>
   <header>
-    <h1>Portfolio Ledger</h1>
+    <div class="header-title">
+      <h1>Portfolio Ledger</h1>
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button class="tab active" role="tab" id="portfolioTab" aria-controls="portfolioView" aria-selected="true">Portfolio</button>
+        <button class="tab" role="tab" id="taxTab" aria-controls="taxView" aria-selected="false" tabindex="-1">Tax projection</button>
+      </nav>
+    </div>
     <div class="header-actions">
       <button id="remindersBtn" class="secondary">Reminders…</button>
       <button id="backupBtn" class="secondary">Back up</button>
@@ -29,7 +35,7 @@
     </div>
   </header>
 
-  <main>
+  <main id="portfolioView" role="tabpanel" aria-labelledby="portfolioTab">
     <div class="toolbar">
       <button id="addRowBtn">+ Add policy</button>
       <button id="importBtn">Import from Excel</button>
@@ -86,6 +92,62 @@
       </thead>
       <tbody id="policyTableBody"></tbody>
     </table>
+  </main>
+
+  <main id="taxView" role="tabpanel" aria-labelledby="taxTab" hidden>
+    <div class="tax-controls">
+      <label>Financial year <select id="taxYear"></select></label>
+      <label>No tax if total income is up to
+        <span class="money-input">₹ <input id="taxRebateLimit" type="number" min="0" step="10000" inputmode="numeric"></span>
+      </label>
+      <p class="field-help">
+        New tax regime, section 87A rebate. It's a limit, not a deduction: above it the whole income is taxed.
+        Enter each holder's other income (salary etc.) and tax rate below; include cess in the rate (30% slab → 31.2).
+      </p>
+    </div>
+
+    <section id="taxTiles" class="tiles" aria-label="Tax projection summary"></section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>By holder</h2></div>
+      <p class="field-help panel-note">Every policy is taxed to its holder, including joint ones. Changes save as you type.</p>
+      <table id="taxHolderTable" class="tax-table">
+        <thead>
+          <tr>
+            <th>Holder</th>
+            <th class="num">Other income this year</th>
+            <th class="num">Tax rate %</th>
+            <th class="num">Taxable interest</th>
+            <th class="num">Exempt interest</th>
+            <th class="num">Total income</th>
+            <th class="num">Estimated tax on interest</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2 id="taxPoliciesTitle">Interest by policy</h2></div>
+      <p class="field-help panel-note">
+        Tick <strong>Tax-exempt</strong> for policies whose interest isn't taxed (for example PPF).
+        Cumulative interest is counted in the year it's earned, even though it's paid at maturity.
+      </p>
+      <table id="taxPolicyTable" class="tax-table">
+        <thead>
+          <tr>
+            <th>Policy No</th>
+            <th>Holder</th>
+            <th>Instrument</th>
+            <th>Income</th>
+            <th class="num">Interest this year</th>
+            <th>Tax-exempt</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="taxMissing" class="field-help" hidden></p>
+    </section>
   </main>
 
   <div id="chartTooltip" class="chart-tooltip" role="tooltip" hidden></div>
@@ -167,6 +229,8 @@
 
   <script src="filterPolicies.js"></script>
   <script src="portfolioMath.js"></script>
+  <script src="taxMath.js"></script>
   <script src="renderer.js"></script>
+  <script src="taxView.js"></script>
 </body>
 </html>

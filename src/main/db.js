@@ -3,10 +3,12 @@
 const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 const { toTitleCase } = require('../shared/nameCase.js');
-const { INCOME_TREATMENTS, isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
+const { INCOME_TREATMENTS, TAX_TREATMENTS, isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
 
 const FD_MATURITY_ERROR = 'Maturity date is required for fixed deposits.';
-const INCOME_TREATMENT_CHECK = `CHECK (income_treatment IN (${INCOME_TREATMENTS.map((t) => `'${t}'`).join(', ')}))`;
+const oneOf = (column, values) => `CHECK (${column} IN (${values.map((v) => `'${v}'`).join(', ')}))`;
+const INCOME_TREATMENT_CHECK = oneOf('income_treatment', INCOME_TREATMENTS);
+const TAX_TREATMENT_CHECK = oneOf('tax_treatment', TAX_TREATMENTS);
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS institutions (
@@ -45,6 +47,7 @@ CREATE TABLE IF NOT EXISTS policies (
   nominee_id INTEGER REFERENCES people(id),
   destination_id INTEGER REFERENCES destinations(id),
   income_treatment TEXT ${INCOME_TREATMENT_CHECK}, -- NULL = not recorded
+  tax_treatment TEXT ${TAX_TREATMENT_CHECK}, -- NULL = taxable
   deleted_at TEXT -- soft delete: set when the user deletes, NULL while active
 );
 
@@ -83,6 +86,9 @@ function migrate(db) {
   const policyColumns = db.prepare('PRAGMA table_info(policies)').all().map((c) => c.name);
   if (!policyColumns.includes('income_treatment')) {
     db.exec(`ALTER TABLE policies ADD COLUMN income_treatment TEXT ${INCOME_TREATMENT_CHECK};`);
+  }
+  if (!policyColumns.includes('tax_treatment')) {
+    db.exec(`ALTER TABLE policies ADD COLUMN tax_treatment TEXT ${TAX_TREATMENT_CHECK};`);
   }
   normalizeLookupNames(db);
 }
@@ -370,8 +376,19 @@ function deletePolicies(db, ids) {
 /** Set the income treatment of several active policies at once. Returns how many were updated. */
 function setIncomeTreatment(db, ids, treatment) {
   if (!INCOME_TREATMENTS.includes(treatment)) throw new Error(`Unknown income treatment: ${treatment}`);
-  const update = db.prepare('UPDATE policies SET income_treatment = ? WHERE id = ? AND deleted_at IS NULL');
-  return inTransaction(db, () => ids.reduce((n, id) => n + Number(update.run(treatment, id).changes), 0));
+  return setOnActivePolicies(db, ids, 'income_treatment', treatment);
+}
+
+/** Tag several active policies as taxable or tax-exempt at once. Returns how many were updated. */
+function setTaxTreatment(db, ids, treatment) {
+  if (!TAX_TREATMENTS.includes(treatment)) throw new Error(`Unknown tax treatment: ${treatment}`);
+  return setOnActivePolicies(db, ids, 'tax_treatment', treatment);
+}
+
+/** column is one of our own column names, never user input. */
+function setOnActivePolicies(db, ids, column, value) {
+  const update = db.prepare(`UPDATE policies SET ${column} = ? WHERE id = ? AND deleted_at IS NULL`);
+  return inTransaction(db, () => ids.reduce((n, id) => n + Number(update.run(value, id).changes), 0));
 }
 
 function restorePolicy(db, id) {
@@ -388,7 +405,7 @@ function listPolicies(db, { includeDeleted = false } = {}) {
     .prepare(
       `SELECT
         p.id, p.policy_number, p.instrument, p.start_date, p.maturity_date, p.term_total,
-        p.amount_invested, p.roi, p.compounding_periods_per_year, p.maturity_amount, p.income_treatment, p.deleted_at,
+        p.amount_invested, p.roi, p.compounding_periods_per_year, p.maturity_amount, p.income_treatment, p.tax_treatment, p.deleted_at,
         i.name AS institution, i.branch AS branch,
         h.name AS holder, jh.name AS joint_holder, n.name AS nominee,
         d.bank AS destination_bank, d.account AS destination_account
@@ -500,6 +517,7 @@ module.exports = {
   deletePolicy,
   deletePolicies,
   setIncomeTreatment,
+  setTaxTreatment,
   restorePolicy,
   listPolicies,
   getPortfolioSummary,
