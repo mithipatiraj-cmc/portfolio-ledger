@@ -72,11 +72,9 @@
     const tiles = [
       { label: 'Bills', value: String(s.billCount) },
       {
-        label: 'Per month, on average',
+        label: 'Monthly from bank, avg',
         value: rupeesWhole.format(s.monthlyEquivalent),
-        note: s.unknownAmountCount
-          ? `${s.unknownAmountCount} bill${s.unknownAmountCount === 1 ? '' : 's'} with no amount yet not counted`
-          : 'varying bills at their last payment'
+        note: averageNote(s)
       },
       {
         label: 'Overdue',
@@ -90,9 +88,9 @@
         note: s.dueSoonCount ? rupeesWhole.format(s.dueSoonAmount) : ''
       },
       {
-        label: 'Paid this month',
+        label: 'Paid from bank this month',
         value: rupeesWhole.format(s.paidThisMonth),
-        note: `${s.paymentsThisMonth} payment${s.paymentsThisMonth === 1 ? '' : 's'}`
+        note: paidNote(s)
       }
     ];
     tilesEl.replaceChildren(...tiles.map((t) => {
@@ -103,6 +101,25 @@
       if (t.note) tile.append(el('div', 'tile-note', t.note));
       return tile;
     }));
+  }
+
+  /** What the monthly average leaves out: card bills (the card's own bill covers them) and bills with no amount yet. */
+  function averageNote(s) {
+    const parts = [];
+    if (s.cardBillCount) {
+      parts.push(`${rupeesWhole.format(s.cardMonthlyEquivalent)}/month on credit cards not included`);
+    }
+    if (s.unknownAmountCount) {
+      parts.push(`${s.unknownAmountCount} bill${s.unknownAmountCount === 1 ? '' : 's'} with no amount yet`);
+    }
+    return parts.length ? parts.join(' · ') : 'direct payments and checks';
+  }
+
+  function paidNote(s) {
+    const count = `${s.paymentsThisMonth} payment${s.paymentsThisMonth === 1 ? '' : 's'}`;
+    return s.cardPaymentsThisMonth
+      ? `${count} · ${rupeesWhole.format(s.paidByCardThisMonth)} on credit cards not included`
+      : count;
   }
 
   // --- Bills table ---

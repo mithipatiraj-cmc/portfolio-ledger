@@ -87,9 +87,15 @@ insurance, …) and every payment you make on them.
   mistake can be deleted.
 - **Archive** hides a bill you no longer pay but keeps its history; turn on
   **Show archived** to see or restore it.
-- The tiles show the average cost per month (a ₹12,000 yearly bill counts as
-  ₹1,000; a bill that varies counts at its last payment), what's overdue or
-  due in the next 7 days, and what you paid this month.
+- The tiles show the average paid out of the bank per month (a ₹12,000 yearly
+  bill counts as ₹1,000; a bill that varies counts at its last payment), what's
+  overdue or due in the next 7 days, and what you paid from the bank this
+  month. Both money figures count only direct bank payments and check
+  deposits: credit card amounts are left out (and shown separately) because the
+  card's own bill, paid from the bank, already covers them. Add the card itself
+  as a bill paid by bank payment. The monthly average goes by each bill's usual
+  method; paid this month goes by the method recorded on each payment, so a
+  one-off card payment on a bank-paid bill is left out, and vice versa.
 
 ## Email reminders before maturity and bill due dates (optional)
 

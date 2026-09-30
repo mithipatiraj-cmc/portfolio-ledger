@@ -12,6 +12,12 @@
   const PAYMENT_METHODS = ['bank_transfer', 'check', 'credit_card'];
   const METHOD_LABELS = { bank_transfer: 'Direct bank payment', check: 'Check deposit', credit_card: 'Credit card' };
 
+  // Methods that take money straight out of a bank account. Card bills are left
+  // out of the monthly average: the card's own bill, paid from the bank, covers them.
+  const BANK_METHODS = ['bank_transfer', 'check'];
+  // Works for a bill (its usual method) or a payment (the method actually used).
+  const isPaidFromBank = (billOrPayment) => BANK_METHODS.includes(billOrPayment.payment_method);
+
   // How often a bill falls due, and how many months each step moves the due date.
   // Bi-monthly means every two months (as with bimonthly electricity bills).
   const FREQUENCIES = [
@@ -77,6 +83,12 @@
    * ₹12,000 bill counts as ₹1,000), what's overdue or due within a week, and
    * what was paid this calendar month (from payments). Bills without a usual
    * amount count at their last payment; unknownAmountCount is those with neither.
+   *
+   * Both money figures count only what leaves the bank (direct payment or
+   * check), so a card's charges aren't counted twice once the card's own bill
+   * is paid: the monthly average by each bill's usual method (a forecast), and
+   * paid this month by the method recorded on each payment (what happened).
+   * Card amounts are reported separately (cardMonthlyEquivalent, paidByCardThisMonth).
    */
   function summarizeBills(bills, payments, today = new Date()) {
     const active = bills.filter((b) => !b.archived_at);
@@ -85,28 +97,40 @@
     const amountOf = (list) => list.reduce((sum, b) => sum + (expectedAmount(b) ?? 0), 0);
     const overdue = active.filter((b) => status(b)?.level === 'overdue');
     const dueSoon = active.filter((b) => status(b)?.level === 'soon');
-    const paidThisMonth = payments.filter((p) => String(p.paid_on).startsWith(monthPrefix));
+    const thisMonth = payments.filter((p) => String(p.paid_on).startsWith(monthPrefix));
+    const paidFromBank = thisMonth.filter(isPaidFromBank);
+    const paidByCard = thisMonth.filter((p) => !isPaidFromBank(p));
+    const total = (list) => list.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const perMonth = (list) => list.reduce((sum, b) => sum + (expectedAmount(b) ?? 0) / monthsFor(b.frequency), 0);
+    const fromBank = active.filter(isPaidFromBank);
+    const onCard = active.filter((b) => !isPaidFromBank(b));
     return {
       billCount: active.length,
-      monthlyEquivalent: active.reduce((sum, b) => sum + (expectedAmount(b) ?? 0) / monthsFor(b.frequency), 0),
-      unknownAmountCount: active.filter((b) => expectedAmount(b) === null).length,
+      monthlyEquivalent: perMonth(fromBank),
+      unknownAmountCount: fromBank.filter((b) => expectedAmount(b) === null).length,
+      cardBillCount: onCard.length,
+      cardMonthlyEquivalent: perMonth(onCard),
       overdueCount: overdue.length,
       overdueAmount: amountOf(overdue),
       dueSoonCount: dueSoon.length,
       dueSoonAmount: amountOf(dueSoon),
-      paidThisMonth: paidThisMonth.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
-      paymentsThisMonth: paidThisMonth.length
+      paidThisMonth: total(paidFromBank),
+      paymentsThisMonth: paidFromBank.length,
+      paidByCardThisMonth: total(paidByCard),
+      cardPaymentsThisMonth: paidByCard.length
     };
   }
 
   const api = {
     PAYMENT_METHODS,
+    BANK_METHODS,
     FREQUENCIES,
     FREQUENCY_VALUES,
     DUE_SOON_DAYS,
     methodLabel,
     frequencyLabel,
     expectedAmount,
+    isPaidFromBank,
     nextDueDate,
     dueStatus,
     summarizeBills

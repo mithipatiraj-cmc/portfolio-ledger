@@ -3,7 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../src/main/db.js');
-const { nextDueDate, dueStatus, summarizeBills, methodLabel, frequencyLabel, expectedAmount } = require('../src/renderer/billsMath.js');
+const {
+  nextDueDate, dueStatus, summarizeBills, methodLabel, frequencyLabel, expectedAmount, isPaidFromBank
+} = require('../src/renderer/billsMath.js');
 
 const TODAY = new Date(2026, 8, 30); // 30 Sep 2026, local time
 const electricity = { name: 'Electricity', paymentMethod: 'bank_transfer', dueDate: '2026-10-05', amount: 2400 };
@@ -35,31 +37,68 @@ test('dueStatus flags overdue and due within a week', () => {
 
 test('summarizeBills totals active bills, what is overdue or due soon, and payments this month', () => {
   const bills = [
-    { amount: 1000, due_date: '2026-09-20', frequency: 'monthly' },
-    { amount: 500, due_date: '2026-10-02' },
-    { amount: 3600, due_date: '2026-11-01', frequency: 'annual' },
-    { amount: 9999, due_date: '2026-09-01', archived_at: '2026-09-02' }
+    { amount: 1000, due_date: '2026-09-20', frequency: 'monthly', payment_method: 'bank_transfer' },
+    { amount: 500, due_date: '2026-10-02', payment_method: 'check' },
+    { amount: 3600, due_date: '2026-11-01', frequency: 'annual', payment_method: 'bank_transfer' },
+    { amount: 9999, due_date: '2026-09-01', archived_at: '2026-09-02', payment_method: 'bank_transfer' }
   ];
-  const payments = [{ amount: 700, paid_on: '2026-09-03' }, { amount: 50, paid_on: '2026-08-31' }];
+  const payments = [
+    { amount: 700, paid_on: '2026-09-03', payment_method: 'bank_transfer' },
+    { amount: 50, paid_on: '2026-08-31', payment_method: 'check' }
+  ];
   assert.deepEqual(summarizeBills(bills, payments, TODAY), {
     billCount: 3, monthlyEquivalent: 1800, // 1000 + 500 + 3600/12
     overdueCount: 1, overdueAmount: 1000,
     dueSoonCount: 1, dueSoonAmount: 500,
-    paidThisMonth: 700, paymentsThisMonth: 1, unknownAmountCount: 0
+    paidThisMonth: 700, paymentsThisMonth: 1, unknownAmountCount: 0,
+    cardBillCount: 0, cardMonthlyEquivalent: 0, paidByCardThisMonth: 0, cardPaymentsThisMonth: 0
   });
 });
 
 test('summarizeBills counts a bill whose amount varies at its last payment, and flags ones with neither', () => {
   const bills = [
-    { amount: null, last_paid_amount: 1200, due_date: '2026-10-02' },
-    { amount: null, last_paid_amount: null, due_date: '2026-10-03' },
-    { amount: 0, last_paid_amount: 999, due_date: '2026-11-01' } // a real 0 wins over the last payment
+    { amount: null, last_paid_amount: 1200, due_date: '2026-10-02', payment_method: 'bank_transfer' },
+    { amount: null, last_paid_amount: null, due_date: '2026-10-03', payment_method: 'bank_transfer' },
+    { amount: 0, last_paid_amount: 999, due_date: '2026-11-01', payment_method: 'check' } // a real 0 wins over the last payment
   ];
   const s = summarizeBills(bills, [], TODAY);
   assert.equal(s.monthlyEquivalent, 1200);
   assert.equal(s.dueSoonAmount, 1200);
   assert.equal(s.unknownAmountCount, 1);
   assert.equal(expectedAmount({ amount: 2400, last_paid_amount: 2650 }), 2400);
+});
+
+test('summarizeBills: the monthly average counts only bills paid from the bank, not credit card bills', () => {
+  const bills = [
+    { amount: 25000, due_date: '2026-10-01', payment_method: 'check' },
+    { amount: 2400, due_date: '2026-10-20', frequency: 'bimonthly', payment_method: 'bank_transfer' },
+    { amount: 649, due_date: '2026-10-05', payment_method: 'credit_card' },
+    { amount: 12000, due_date: '2027-01-31', frequency: 'annual', payment_method: 'credit_card' },
+    { amount: null, due_date: '2026-10-10', payment_method: 'credit_card' } // no amount, but on a card: not flagged
+  ];
+  const s = summarizeBills(bills, [], TODAY);
+  assert.equal(s.monthlyEquivalent, 25000 + 1200);
+  assert.equal(s.cardBillCount, 3);
+  assert.equal(s.cardMonthlyEquivalent, 649 + 1000);
+  assert.equal(s.unknownAmountCount, 0);
+  assert.equal(s.billCount, 5, 'card bills are still bills');
+  assert.equal(s.dueSoonAmount, 25000 + 649, 'what is due soon still includes card bills');
+  assert.equal(isPaidFromBank({ payment_method: 'credit_card' }), false);
+});
+
+test('summarizeBills: paid this month counts payments made from the bank, by the method actually used', () => {
+  const payments = [
+    { amount: 25000, paid_on: '2026-09-01', payment_method: 'check' },
+    { amount: 599, paid_on: '2026-09-12', payment_method: 'credit_card' }, // a bank-paid bill, paid by card this once
+    { amount: 649, paid_on: '2026-09-05', payment_method: 'bank_transfer' }, // a card bill, paid from the bank this once
+    { amount: 18500, paid_on: '2026-09-20', payment_method: 'bank_transfer' }, // the card's own bill
+    { amount: 999, paid_on: '2026-08-30', payment_method: 'bank_transfer' } // last month
+  ];
+  const s = summarizeBills([], payments, TODAY);
+  assert.equal(s.paidThisMonth, 25000 + 649 + 18500);
+  assert.equal(s.paymentsThisMonth, 3);
+  assert.equal(s.paidByCardThisMonth, 599);
+  assert.equal(s.cardPaymentsThisMonth, 1);
 });
 
 test('addBill validates the form: name, method, bank details for checks, due date, and an amount if given', () => {

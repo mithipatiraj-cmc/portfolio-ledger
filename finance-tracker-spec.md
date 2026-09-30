@@ -328,10 +328,20 @@ CREATE TABLE bill_payments (
 - **Archive, don't delete:** archiving hides a bill but keeps it and its
   history; it can be restored. A single payment entered by mistake can be
   deleted (the due date is left as it is).
-- **Summary tiles:** bill count; average cost per month (amount ÷ months per
-  period, so a ₹12,000 yearly bill counts as ₹1,000; a bill with no usual
-  amount counts at its last payment, and one never paid isn't counted);
-  overdue; due within 7 days; and paid this calendar month (from the history).
+- **Summary tiles:** bill count; average paid from the bank per month (amount ÷
+  months per period, so a ₹12,000 yearly bill counts as ₹1,000; a bill with no
+  usual amount counts at its last payment, and one never paid isn't counted).
+  Only bills whose usual method is `bank_transfer` or `check` count: a
+  `credit_card` bill is charged to the card, and the card's own bill (paid from
+  the bank) is what leaves the account, so counting both would double-count.
+  Card bills' monthly total is shown separately in the tile's note.
+- **Paid from bank this month:** the same rule applied to the payment history:
+  payments this calendar month whose recorded method is `bank_transfer` or
+  `check`. It goes by each payment's own method rather than the bill's, since a
+  single period can be paid differently; card payments are totalled separately
+  in the note.
+- **Overdue** and **due within 7 days** cover all bills, cards included, since
+  they're about what needs paying rather than what leaves the bank.
 - **Upgrading older databases:** SQLite can't change a NOT NULL or CHECK
   constraint in place, so on startup the bills tables are rebuilt from the
   current definitions when they're out of date (e.g. created before credit
