@@ -637,6 +637,8 @@ const remRecipient = document.getElementById('remRecipient');
 const remGmailUser = document.getElementById('remGmailUser');
 const remPassword = document.getElementById('remPassword');
 const remDays = document.getElementById('remDays');
+const remBills = document.getElementById('remBills');
+const remBillDays = document.getElementById('remBillDays');
 const remHour = document.getElementById('remHour');
 const remStatus = document.getElementById('remStatus');
 const remMessage = document.getElementById('remMessage');
@@ -654,6 +656,8 @@ function reminderFormInput() {
     gmailUser: remGmailUser.value,
     appPassword: remPassword.value,
     daysBefore: remDays.value,
+    billsEnabled: remBills.checked,
+    billDaysBefore: remBillDays.value,
     checkHour: Number(remHour.value)
   };
 }
@@ -671,6 +675,9 @@ function renderReminderSettings({ prefs, lastCheck, schedule }) {
   remPassword.value = '';
   remPassword.placeholder = prefs.hasPassword ? 'Saved — leave blank to keep' : '';
   remDays.value = prefs.daysBefore.join(', ');
+  remBills.checked = prefs.billsEnabled;
+  remBillDays.value = prefs.billDaysBefore.join(', ');
+  remBillDays.disabled = !prefs.billsEnabled;
   remHour.value = String(prefs.checkHour);
   remFields.classList.toggle('disabled', !prefs.enabled);
   renderReminderStatus({ prefs, lastCheck, schedule });
@@ -689,6 +696,7 @@ function renderReminderStatus({ prefs, lastCheck, schedule }) {
 }
 
 remEnabled.addEventListener('change', () => remFields.classList.toggle('disabled', !remEnabled.checked));
+remBills.addEventListener('change', () => { remBillDays.disabled = !remBills.checked; });
 
 remindersBtn.addEventListener('click', async () => {
   showReminderMessage('');

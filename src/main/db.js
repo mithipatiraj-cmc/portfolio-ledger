@@ -98,6 +98,15 @@ CREATE TABLE IF NOT EXISTS reminder_log (
   sent_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (policy_id, maturity_date, days_before)
 );
+
+-- The same for bills, keyed on the due date so each new due date is reminded afresh.
+CREATE TABLE IF NOT EXISTS bill_reminder_log (
+  bill_id INTEGER NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
+  due_date TEXT NOT NULL,
+  days_before INTEGER NOT NULL,
+  sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (bill_id, due_date, days_before)
+);
 `;
 
 /**
@@ -226,6 +235,7 @@ function recreateDbSchema(db) {
 
   // Settings (preferences) survive a reset; the reminder log refers to policy ids, so it goes.
   db.exec(`
+    DROP TABLE IF EXISTS bill_reminder_log;
     DROP TABLE IF EXISTS bill_payments;
     DROP TABLE IF EXISTS bills;
     DROP TABLE IF EXISTS reminder_log;
@@ -657,14 +667,26 @@ function recordRemindersSent(db, entries) {
   const insert = db.prepare(
     'INSERT OR IGNORE INTO reminder_log (policy_id, maturity_date, days_before) VALUES (?, ?, ?)'
   );
-  db.exec('BEGIN');
-  try {
+  inTransaction(db, () => {
     for (const e of entries) insert.run(e.policyId, e.maturityDate, e.daysBefore);
-    db.exec('COMMIT');
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
-  }
+  });
+}
+
+/** Set of "billId|dueDate|daysBefore" keys for bill reminders already sent. */
+function listSentBillReminders(db) {
+  return new Set(
+    db.prepare('SELECT bill_id, due_date, days_before FROM bill_reminder_log').all()
+      .map((r) => `${r.bill_id}|${r.due_date}|${r.days_before}`)
+  );
+}
+
+function recordBillRemindersSent(db, entries) {
+  const insert = db.prepare(
+    'INSERT OR IGNORE INTO bill_reminder_log (bill_id, due_date, days_before) VALUES (?, ?, ?)'
+  );
+  inTransaction(db, () => {
+    for (const e of entries) insert.run(e.billId, e.dueDate, e.daysBefore);
+  });
 }
 
 module.exports = {
@@ -696,5 +718,7 @@ module.exports = {
   getSetting,
   setSetting,
   listSentReminders,
-  recordRemindersSent
+  recordRemindersSent,
+  listSentBillReminders,
+  recordBillRemindersSent
 };

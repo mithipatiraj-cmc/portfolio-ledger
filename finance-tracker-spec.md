@@ -333,9 +333,20 @@ CREATE TABLE bill_payments (
   days; and paid this calendar month (from the history).
 - **Payment history** lists every payment newest first, filterable by bill.
 
-### 7c. Possible next steps
+### 7c. Email reminders
 
-- Email reminders before a bill is due, reusing the maturity-reminder scheduler
+Bill reminders are an option of the existing email reminders (off by default):
+**Also remind me when bills are due**, with their own **days before** list
+(default 3 and 1, since bills come round far more often than maturities). The
+daily check puts due bills into the same digest email as maturing policies,
+in a separate table. A `bill_reminder_log (bill_id, due_date, days_before)`
+table records what was sent, so each threshold goes out once per due date;
+paying a bill moves its due date on, which starts the next cycle, and a bill
+paid before its reminder is never reminded. Overdue bills aren't reminded.
+
+### 7d. Possible next steps
+
+- A reminder for bills that go overdue unpaid
 - Variable bills: suggest the amount from the last few payments
 - Yearly spend per bill and a chart of spending by month
 

@@ -293,8 +293,9 @@
     <form id="remindersForm" class="modal" novalidate>
       <h2>Email reminders</h2>
       <p class="modal-sub">
-        Get an email before a policy matures. Off unless you turn it on. Reminders include the
-        policy number, institution, holder and amounts, sent through your own Gmail account.
+        Get an email before a policy matures, and optionally before a bill is due. Off unless you
+        turn it on. Reminders include the policy or bill details and amounts, sent through your own
+        Gmail account.
       </p>
 
       <label class="check-row"><input id="remEnabled" type="checkbox"> Send email reminders</label>
@@ -319,6 +320,18 @@
         <div>
           <input id="remDays" type="text" placeholder="30, 7, 1">
           <div class="field-help">One email per threshold, e.g. 30, 7 and 1 day before.</div>
+        </div>
+
+        <span class="form-grid-label">Bills</span>
+        <label class="check-row inline-check"><input id="remBills" type="checkbox"> Also remind me when bills are due</label>
+
+        <label for="remBillDays">Days before a bill is due</label>
+        <div>
+          <input id="remBillDays" type="text" placeholder="3, 1">
+          <div class="field-help">
+            e.g. 3 and 1 day before, or 0 for the due date. Paying a bill moves its due date on,
+            so a paid bill isn't reminded again until its next due date.
+          </div>
         </div>
 
         <label for="remHour">Daily check at</label>

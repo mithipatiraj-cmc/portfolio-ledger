@@ -558,6 +558,9 @@ button.link-btn:hover { text-decoration: underline; }
 }
 
 .form-grid.disabled { opacity: 0.55; }
+.form-grid-label { padding-top: 6px; color: var(--text-2); }
+.check-row.inline-check { margin: 0; padding-top: 4px; font-weight: 400; }
+.form-grid input:disabled { opacity: 0.55; }
 
 .field-help { color: var(--muted); font-size: 0.75rem; margin-top: 4px; line-height: 1.4; }
 

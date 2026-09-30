@@ -9,7 +9,14 @@ const path = require('node:path');
 const { safeStorage } = require('electron');
 const db = require('./db.js');
 const { sendMail } = require('./mailer.js');
-const { normalizePrefs, parseDaysBefore, isValidEmail, findDueReminders, buildReminderEmail } = require('./reminders.js');
+const {
+  normalizePrefs,
+  parseDaysBefore,
+  isValidEmail,
+  findDueReminders,
+  findDueBillReminders,
+  buildReminderEmail
+} = require('./reminders.js');
 const scheduler = require('./scheduler.js');
 
 const PREFS_KEY = 'reminders';
@@ -65,12 +72,18 @@ function createReminderService({ getDatabase, userDataPath, launchCommand }) {
   function validateInput(input, { requireComplete }) {
     const current = loadPrefs();
     const daysBefore = parseDaysBefore(input.daysBefore);
-    if (!daysBefore) throw new Error('"Days before" must be whole numbers between 0 and 365, e.g. 30, 7, 1.');
+    if (!daysBefore) throw new Error('"Days before maturity" must be whole numbers between 0 and 365, e.g. 30, 7, 1.');
+    const billsEnabled = Boolean(input.billsEnabled);
+    // Keep the saved bill thresholds while bill reminders are off, so ticking them again restores them.
+    const billDaysBefore = billsEnabled ? parseDaysBefore(input.billDaysBefore) : current.billDaysBefore;
+    if (!billDaysBefore) throw new Error('"Days before a bill is due" must be whole numbers between 0 and 365, e.g. 3, 1.');
     const prefs = normalizePrefs({
       enabled: Boolean(input.enabled),
       recipient: String(input.recipient ?? '').trim(),
       gmailUser: String(input.gmailUser ?? '').trim(),
       daysBefore,
+      billsEnabled,
+      billDaysBefore,
       checkHour: Number(input.checkHour)
     });
     const password = String(input.appPassword ?? '').trim();
@@ -109,7 +122,8 @@ function createReminderService({ getDatabase, userDataPath, launchCommand }) {
       appPassword: password || readPassword(),
       to: prefs.recipient,
       subject: 'Portfolio Ledger: test email',
-      text: `Email reminders are working. You'll be emailed ${prefs.daysBefore.join(', ')} day(s) before a policy matures.`
+      text: `Email reminders are working. You'll be emailed ${prefs.daysBefore.join(', ')} day(s) before a policy matures` +
+        (prefs.billsEnabled ? ` and ${prefs.billDaysBefore.join(', ')} day(s) before a bill is due.` : '.')
     });
     return { ok: true };
   }
@@ -128,13 +142,18 @@ function createReminderService({ getDatabase, userDataPath, launchCommand }) {
       try {
         const database = getDatabase();
         const due = findDueReminders(db.listPolicies(database), db.listSentReminders(database), prefs.daysBefore);
-        if (due.length > 0) {
+        const billsDue = prefs.billsEnabled
+          ? findDueBillReminders(db.listBills(database), db.listSentBillReminders(database), prefs.billDaysBefore)
+          : [];
+        if (due.length + billsDue.length > 0) {
           const password = readPassword();
           if (!password) throw new Error('No Gmail app password saved.');
-          const mail = buildReminderEmail(due);
+          const mail = buildReminderEmail(due, billsDue);
           await sendMail({ gmailUser: prefs.gmailUser, appPassword: password, to: prefs.recipient, ...mail });
+          // Both logs only after the email went out, so a failed send is retried next check.
           db.recordRemindersSent(database, due.flatMap((d) => d.markSent));
-          result.sent = due.length;
+          db.recordBillRemindersSent(database, billsDue.flatMap((d) => d.markSent));
+          result.sent = due.length + billsDue.length;
         }
       } catch (err) {
         result.ok = false;

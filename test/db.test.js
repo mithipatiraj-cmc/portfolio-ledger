@@ -28,7 +28,7 @@ test('schema creates the data, bills, settings and reminder-log tables', () => {
     .all()
     .map((r) => r.name);
   assert.deepEqual(tables, [
-    'bill_payments', 'bills', 'destinations', 'institutions', 'people', 'policies', 'reminder_log', 'settings'
+    'bill_payments', 'bill_reminder_log', 'bills', 'destinations', 'institutions', 'people', 'policies', 'reminder_log', 'settings'
   ]);
 });
 

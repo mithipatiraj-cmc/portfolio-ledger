@@ -8,6 +8,7 @@ const {
   isValidEmail,
   sentKey,
   findDueReminders,
+  findDueBillReminders,
   buildReminderEmail
 } = require('../src/main/reminders.js');
 
@@ -92,4 +93,55 @@ test('buildReminderEmail: one digest, soonest first, with HTML escaped', () => {
 
   const single = buildReminderEmail(due.slice(0, 1));
   assert.equal(single.subject, 'Portfolio Ledger: FD-2 matures tomorrow');
+});
+
+const bill = (id, due_date, extra = {}) => ({
+  id, name: `Bill ${id}`, due_date, amount: 2400, payment_method: 'check', bank_detail: 'SBI ••4471',
+  frequency: 'monthly', ...extra
+});
+
+test('normalizePrefs: bill reminders are off by default, with 3 and 1 day thresholds', () => {
+  const prefs = normalizePrefs(null);
+  assert.equal(prefs.billsEnabled, false);
+  assert.deepEqual(prefs.billDaysBefore, [3, 1]);
+  assert.deepEqual(normalizePrefs({ billDaysBefore: [1, 3, 3, -2] }).billDaysBefore, [3, 1]);
+});
+
+test('findDueBillReminders: most urgent unsent threshold only, skipping archived and overdue bills', () => {
+  const bills = [
+    bill(1, '2026-09-26'), // 2 days → the 3-day reminder
+    bill(2, '2026-09-25'), // 1 day → the 1-day reminder, marking 3 as sent too
+    bill(3, '2026-10-10'), // too far off
+    bill(4, '2026-09-25', { archived_at: '2026-09-01' }),
+    bill(5, '2026-09-20') // overdue
+  ];
+  const due = findDueBillReminders(bills, new Set(), [3, 1], TODAY);
+  assert.deepEqual(due.map((d) => [d.bill.id, d.days, d.daysBefore]), [[2, 1, 1], [1, 2, 3]]);
+  assert.deepEqual(due[0].markSent, [
+    { billId: 2, dueDate: '2026-09-25', daysBefore: 1 },
+    { billId: 2, dueDate: '2026-09-25', daysBefore: 3 }
+  ]);
+});
+
+test('findDueBillReminders: sent once per due date, and again after the bill is paid and its date moves on', () => {
+  const sent = new Set([sentKey(1, '2026-09-26', 3)]);
+  assert.equal(findDueBillReminders([bill(1, '2026-09-26')], sent, [3, 1], TODAY).length, 0, 'already sent');
+  const paid = bill(1, '2026-10-26'); // next month's due date
+  assert.equal(findDueBillReminders([paid], sent, [3, 1], new Date(2026, 9, 24)).length, 1);
+});
+
+test('buildReminderEmail: bills alone, and policies and bills together in one digest', () => {
+  const billsDue = findDueBillReminders([bill(1, '2026-09-25', { name: 'Rent <flat>', amount: 25000 })], new Set(), [3, 1], TODAY);
+  const onlyBills = buildReminderEmail([], billsDue);
+  assert.equal(onlyBills.subject, 'Portfolio Ledger: Rent <flat> is due tomorrow');
+  assert.match(onlyBills.text, /Rent <flat> — ₹25,000 due 2026-09-25 \(tomorrow\)/);
+  assert.match(onlyBills.text, /Check deposit \(SBI ••4471\); monthly/);
+  assert.match(onlyBills.html, /Rent &lt;flat&gt;/);
+  assert.doesNotMatch(onlyBills.text, /approaching maturity/);
+
+  const due = findDueReminders([policy(1, '2026-10-01')], new Set(), [30, 7, 1], TODAY);
+  const both = buildReminderEmail(due, billsDue);
+  assert.equal(both.subject, 'Portfolio Ledger: 1 policy maturing and 1 bill due soon');
+  assert.ok(both.text.indexOf('approaching maturity') < both.text.indexOf('This bill is due soon'), 'policies first, then bills');
+  assert.equal((both.html.match(/<table/g) ?? []).length, 2);
 });

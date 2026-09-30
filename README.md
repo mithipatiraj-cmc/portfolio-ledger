@@ -87,7 +87,7 @@ insurance, …) and every payment you make on them.
   ₹1,000), what's overdue or due in the next 7 days, and what you paid this
   month.
 
-## Email reminders before maturity (optional)
+## Email reminders before maturity and bill due dates (optional)
 
 Off by default. Open **Reminders…** in the app, tick **Send email reminders**,
 and fill in:
@@ -98,12 +98,18 @@ and fill in:
   account). It's stored encrypted with macOS Keychain or Windows DPAPI.
 - **Days before maturity**, e.g. `30, 7, 1`: one email per threshold, bundled
   into a single digest when several policies are due.
+- **Also remind me when bills are due** (optional) with **Days before a bill
+  is due**, e.g. `3, 1` (or `0` for the due date itself). Bills due soon go
+  into the same digest, in their own table: amount, due date, how it's paid
+  and the bank details. Each reminder is sent once per due date. Recording a
+  payment moves the due date on, so a paid bill isn't reminded again until its
+  next due date, and a bill paid before its reminder doesn't get one.
 
 Use **Send test email** to confirm the setup. Saving registers a daily
 background check (macOS launchd agent / Windows Task Scheduler task) that
 runs the app headless with `--check-reminders`, so reminders go out even when
 the app is closed; the app also checks on launch and hourly while open. Each
-reminder is sent once per policy and threshold. Turning reminders off removes
+reminder is sent once per policy (or bill due date) and threshold. Turning reminders off removes
 the background job. Activity is logged to `reminders.log` in the app's data
 folder.
 

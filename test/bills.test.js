@@ -141,3 +141,13 @@ test('recreateDbSchema clears bills and payments too', () => {
   assert.equal(db.listBills(d, { includeArchived: true }).length, 0);
   assert.equal(db.listPayments(d).length, 0);
 });
+
+test('bill reminder log: records each (bill, due date, threshold) once and is cleared with the bill data', () => {
+  const d = db.initDb(':memory:');
+  const id = db.addBill(d, electricity);
+  const entry = { billId: id, dueDate: '2026-10-05', daysBefore: 3 };
+  db.recordBillRemindersSent(d, [entry, entry]);
+  assert.deepEqual([...db.listSentBillReminders(d)], [`${id}|2026-10-05|3`]);
+  db.recreateDbSchema(d);
+  assert.equal(db.listSentBillReminders(d).size, 0);
+});
