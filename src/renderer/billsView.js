@@ -131,7 +131,7 @@
   // --- Bills table ---
   function renderBills() {
     if (bills.length === 0) {
-      billBody.replaceChildren(emptyRow(7, showArchived.checked ? 'No bills.' : 'No bills yet. Use "+ Add bill" to start tracking one.'));
+      billBody.replaceChildren(emptyRow(6, showArchived.checked ? 'No bills.' : 'No bills yet. Use "+ Add bill" to start tracking one.'));
       return;
     }
     billBody.replaceChildren(...bills.map((bill) => {
@@ -170,10 +170,7 @@
         );
       }
 
-      const usual = hasAmount(bill.amount)
-        ? el('td', 'num', money(bill.amount))
-        : el('td', 'num tax-unknown', 'Varies');
-      tr.append(name, el('td', null, frequencyLabel(bill.frequency)), paidBy, due, usual, last, actions);
+      tr.append(name, el('td', null, frequencyLabel(bill.frequency)), paidBy, due, last, actions);
       return tr;
     }));
   }

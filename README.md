@@ -69,7 +69,7 @@ insurance, …) and every payment you make on them.
   quarterly, every 6 months or yearly), the next due date, how it's paid
   (**direct bank payment**, **check deposit** or **credit card**) and, optionally, the usual
   amount. Leave the amount blank for bills that vary from one period to the
-  next (phone, electricity); they show as **Varies**. Bank / card details are
+  next (phone, electricity). Bank / card details are
   required for a check deposit (the account it's deposited into) and optional
   for a bank payment or credit card (e.g. which card).
 - **Record payment** saves a new entry in the payment history with the date,
