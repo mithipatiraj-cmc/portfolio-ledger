@@ -148,7 +148,7 @@ function createReminderService({ getDatabase, userDataPath, launchCommand }) {
         if (due.length + billsDue.length > 0) {
           const password = readPassword();
           if (!password) throw new Error('No Gmail app password saved.');
-          const mail = buildReminderEmail(due, billsDue);
+          const mail = buildReminderEmail(due, billsDue, { currency: db.getSetting(database, 'currency') ?? undefined });
           await sendMail({ gmailUser: prefs.gmailUser, appPassword: password, to: prefs.recipient, ...mail });
           // Both logs only after the email went out, so a failed send is retried next check.
           db.recordRemindersSent(database, due.flatMap((d) => d.markSent));

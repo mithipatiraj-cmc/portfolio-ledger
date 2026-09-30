@@ -97,6 +97,17 @@ insurance, …) and every payment you make on them.
   method; paid this month goes by the method recorded on each payment, so a
   one-off card payment on a bank-paid bill is left out, and vice versa.
 
+## Currency
+
+Pick the currency amounts are shown in from **Currency** in the header
+(₹ INR by default; also USD, EUR, GBP, AED, SGD, AUD and CAD). It's a display
+preference only: amounts are stored as plain numbers and **not converted**, so
+switching from INR to USD shows ₹1,00,000 as $100,000. Each currency uses its
+usual number format (INR keeps lakh grouping and ₹6.25L-style short amounts).
+The choice is saved with your data and also used in reminder emails. The Tax
+projection tab follows it too, though its rules (April–March financial year,
+the section 87A limit) are still India's.
+
 ## Email reminders before maturity and bill due dates (optional)
 
 Off by default. Open **Reminders…** in the app, tick **Send email reminders**,
@@ -242,7 +253,8 @@ src/
   main/         Electron main process: window creation, IPC handlers, SQLite (db.js)
   import/       Excel parsing (excelImport.js) and import-commit logic (importRunner.js)
                 — both plain Node modules, independent of Electron, fully unit tested
-  renderer/     UI: index.html, styles.css, tabs.js (section tabs), and per tab:
+  renderer/     UI: index.html, styles.css, tabs.js (section tabs), money.js (currency
+                formatting, shared with reminder emails), and per tab:
                   Portfolio: renderer.js, filterPolicies.js, portfolioMath.js
                   Tax projection: taxView.js, taxMath.js
                   Bills: billsView.js, billsMath.js

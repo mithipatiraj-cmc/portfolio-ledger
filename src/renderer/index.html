@@ -26,6 +26,9 @@
       <button id="remindersBtn" class="secondary">Reminders…</button>
       <button id="backupBtn" class="secondary">Back up</button>
       <button id="restoreBtn" class="secondary">Restore…</button>
+      <label class="theme-picker">Currency
+        <select id="currencySelect"></select>
+      </label>
       <label class="theme-picker">Theme
         <select id="themeSelect">
           <option value="system">System</option>
@@ -99,7 +102,7 @@
     <div class="tax-controls">
       <label>Financial year <select id="taxYear"></select></label>
       <label>No tax if total income is up to
-        <span class="money-input">₹ <input id="taxRebateLimit" type="number" min="0" step="10000" inputmode="numeric"></span>
+        <span class="money-input"><span data-currency-symbol>₹</span> <input id="taxRebateLimit" type="number" min="0" step="10000" inputmode="numeric"></span>
       </label>
       <p class="field-help">
         New tax regime, section 87A rebate. It's a limit, not a deduction: above it the whole income is taxed.
@@ -209,7 +212,7 @@
         <label for="billFrequency">How often</label>
         <select id="billFrequency"></select>
 
-        <label for="billAmount">Usual amount (₹)</label>
+        <label for="billAmount">Usual amount (<span data-currency-symbol>₹</span>)</label>
         <div>
           <input id="billAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Optional">
           <div class="field-help">Leave blank if it varies. You enter what you actually paid each time you record a payment.</div>
@@ -246,7 +249,7 @@
         <label for="payDate">Paid on</label>
         <input id="payDate" type="date">
 
-        <label for="payAmount">Amount paid (₹)</label>
+        <label for="payAmount">Amount paid (<span data-currency-symbol>₹</span>)</label>
         <div>
           <input id="payAmount" type="number" min="0" step="0.01" inputmode="decimal">
           <div class="field-help" id="payAmountHelp"></div>
@@ -360,6 +363,7 @@
     </form>
   </div>
 
+  <script src="money.js"></script>
   <script src="filterPolicies.js"></script>
   <script src="portfolioMath.js"></script>
   <script src="taxMath.js"></script>

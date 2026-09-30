@@ -152,3 +152,12 @@ test('buildReminderEmail: a bill whose amount varies shows "Varies" and its last
   const neverPaid = findDueBillReminders([bill(2, '2026-09-25', { amount: null })], new Set(), [3, 1], TODAY);
   assert.match(buildReminderEmail([], neverPaid).text, /Bill 2 — Varies due/);
 });
+
+test('buildReminderEmail formats amounts in the display currency', () => {
+  const due = findDueReminders([policy(1, '2026-10-01')], new Set(), [30, 7, 1], TODAY);
+  const billsDue = findDueBillReminders([bill(1, '2026-09-25', { amount: 125000 })], new Set(), [3, 1], TODAY);
+  const usd = buildReminderEmail(due, billsDue, { currency: 'USD' });
+  assert.match(usd.text, /Invested \$100,000/);
+  assert.match(usd.text, /\$125,000 due/);
+  assert.match(buildReminderEmail(due, billsDue).text, /₹1,25,000 due/, 'INR by default');
+});

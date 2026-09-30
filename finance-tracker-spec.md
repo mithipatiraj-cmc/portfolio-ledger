@@ -93,6 +93,18 @@ CREATE TABLE policies (
 
 ---
 
+## 1b. Display currency
+
+Amounts are stored as plain numbers with no currency attached. A single
+app-wide **display currency** (INR by default; USD, EUR, GBP, AED, SGD, AUD,
+CAD) decides how they're shown, including in reminder emails. It's stored in
+`settings` under `currency`. Switching it relabels amounts without converting
+them, and each currency uses its English-locale number format (INR keeps lakh
+grouping). Holding accounts in more than one currency would need a currency
+per policy and bill, which is still a stretch goal (roadmap Phase 5).
+
+---
+
 ## 2. Excel Import Service (initial load + re-import)
 
 **Goal:** upload the existing Excel once to seed the app, and allow re-uploading later (e.g. after editing the sheet in parallel) without creating duplicates.

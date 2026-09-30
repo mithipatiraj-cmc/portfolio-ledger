@@ -4,6 +4,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const db = require('./db.js');
+const Money = require('../renderer/money.js');
 const { commitImport } = require('../import/importRunner.js');
 const { getImportPreview } = require('../import/excelImport.js');
 const { createReminderService } = require('./reminderService.js');
@@ -46,6 +47,7 @@ function resetDbIfRequested(dbPath) {
 }
 
 const TAX_SETTINGS_KEY = 'tax';
+const CURRENCY_KEY = 'currency';
 
 /** Keep only non-negative numbers: { rebateLimit, holders: { [name]: { rate, otherIncome } } }. */
 function normalizeTaxSettings(input) {
@@ -137,6 +139,17 @@ async function start() {
     db.recordPayment(database, billId, payment, options));
   ipcMain.handle('bills:payments', (_event, opts) => db.listPayments(database, opts));
   ipcMain.handle('bills:deletePayment', (_event, id) => db.deletePayment(database, id));
+
+  // --- Display currency (no conversion; reminder emails use it too) ---
+  ipcMain.handle('settings:getCurrency', () => {
+    const code = db.getSetting(database, CURRENCY_KEY);
+    return Money.isSupported(code) ? code : Money.DEFAULT_CURRENCY;
+  });
+  ipcMain.handle('settings:setCurrency', (_event, code) => {
+    if (!Money.isSupported(code)) throw new Error(`Unsupported currency: ${code}`);
+    db.setSetting(database, CURRENCY_KEY, code);
+    return code;
+  });
 
   // --- Tax projection inputs: the rebate limit plus each holder's rate and other income ---
   ipcMain.handle('tax:getSettings', () => db.getSetting(database, TAX_SETTINGS_KEY, {}));

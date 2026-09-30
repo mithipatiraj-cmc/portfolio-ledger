@@ -45,6 +45,7 @@ const chartTooltip = document.getElementById('chartTooltip');
 const backupBtn = document.getElementById('backupBtn');
 const restoreBtn = document.getElementById('restoreBtn');
 const themeSelect = document.getElementById('themeSelect');
+const currencySelect = document.getElementById('currencySelect');
 const selectAll = document.getElementById('selectAll');
 const bulkBar = document.getElementById('bulkBar');
 const bulkCount = document.getElementById('bulkCount');
@@ -68,10 +69,6 @@ const EDITABLE_COLUMNS = [
 
 const UPCOMING_DAYS = CRITICAL_DAYS;
 
-const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
-const inrCompact = new Intl.NumberFormat('en-IN', {
-  style: 'currency', currency: 'INR', notation: 'compact', maximumFractionDigits: 2
-});
 
 let allPolicies = []; // last full fetch, before any filter is applied
 let sortState = { key: 'maturity_date', direction: 'asc' };
@@ -243,8 +240,8 @@ function renderSortIndicators() {
 // --- Summary tiles: cover only the rows currently shown, so they follow the filter ---
 function renderSummary(summary) {
   const tiles = [
-    { label: 'Accounts', value: summary.accountCount.toLocaleString('en-IN') },
-    { label: 'Total invested', value: inrCompact.format(summary.totalInvested), title: inr.format(summary.totalInvested) },
+    { label: 'Accounts', value: Money.number(summary.accountCount) },
+    { label: 'Total invested', value: Money.compact(summary.totalInvested), title: Money.format(summary.totalInvested) },
     {
       label: 'Weighted avg return',
       value: summary.weightedAvgRoi === null ? '—' : `${summary.weightedAvgRoi.toFixed(2)}%`,
@@ -252,8 +249,8 @@ function renderSummary(summary) {
     },
     {
       label: 'Expected at maturity',
-      value: inrCompact.format(summary.expectedAtMaturity),
-      title: inr.format(summary.expectedAtMaturity),
+      value: Money.compact(summary.expectedAtMaturity),
+      title: Money.format(summary.expectedAtMaturity),
       note: summary.missingMaturityValue ? `${summary.missingMaturityValue} without enough data` : ''
     },
     {
@@ -317,12 +314,12 @@ function renderAllocation(policies) {
     bar.style.width = `calc((100% - 150px) * ${g.amount / max})`;
 
     const track = el('div', 'bar-track');
-    track.append(bar, el('span', 'bar-value', `${inrCompact.format(g.amount)} · ${(g.share * 100).toFixed(1)}%`));
+    track.append(bar, el('span', 'bar-value', `${Money.compact(g.amount)} · ${(g.share * 100).toFixed(1)}%`));
     row.append(el('div', 'bar-label', g.label), track);
 
     const tip = [
       g.label,
-      inr.format(g.amount),
+      Money.format(g.amount),
       `${(g.share * 100).toFixed(1)}% of total · ${g.count} ${g.count === 1 ? 'policy' : 'policies'}`
     ];
     row.addEventListener('mouseenter', (e) => showTooltip(tip, e));
@@ -446,13 +443,13 @@ function renderMaturityValueCell(td, row) {
     td.title = 'Not enough data to calculate (needs amount, ROI, and dates or term).';
     return;
   }
-  td.textContent = (calculated ? '≈ ' : '') + inr.format(value);
+  td.textContent = (calculated ? '≈ ' : '') + Money.format(value);
   if (calculated) td.classList.add('calculated');
   if (calc) {
     const how = `${calc.rate.toFixed(2)}% compounded ${calc.periodsPerYear}×/yr over ${calc.years.toFixed(2)} yrs`;
     td.title = calculated
       ? `Calculated: ${how}`
-      : `Recorded amount. Calculated from the rate: ${inr.format(calc.value)} (${how})`;
+      : `Recorded amount. Calculated from the rate: ${Money.format(calc.value)} (${how})`;
   } else {
     td.title = 'Recorded amount';
   }
@@ -462,7 +459,7 @@ function renderMaturityValueCell(td, row) {
 function formatAmountInput(v) {
   if (v === null || v === undefined || v === '') return '';
   const n = Number(v);
-  return Number.isFinite(n) ? n.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : String(v);
+  return Number.isFinite(n) ? Money.number(n, { maximumFractionDigits: 2 }) : String(v);
 }
 
 /** Shown as a percentage (6.85) whether stored as 0.0685 or 6.85. */
@@ -475,7 +472,7 @@ async function onCellEdit(row, col, span) {
   let value = span.textContent.trim();
   if (value === (col.format ? col.format(row[col.key]) : String(row[col.key] ?? ''))) return; // unchanged
   if (col.numeric) {
-    const parsed = Number(value.replace(/[,₹%\s]/g, ''));
+    const parsed = Number(value.replace(/[,%\s\p{Sc}]/gu, '')); // any currency symbol
     value = value === '' || !Number.isFinite(parsed) ? null : parsed;
   } else if (value === '') {
     value = null;
@@ -627,6 +624,35 @@ themeSelect.addEventListener('change', () => {
     localStorage.setItem('theme', themeSelect.value);
   } catch {}
 });
+
+// --- Currency: a display preference saved in the database (reminder emails use it too) ---
+for (const c of Money.CURRENCIES) {
+  const symbol = Money.createMoney(c.code).symbol;
+  currencySelect.appendChild(Object.assign(document.createElement('option'), {
+    value: c.code,
+    textContent: symbol === c.code ? c.code : `${symbol} ${c.code}`,
+    title: c.name
+  }));
+}
+
+/** Use a currency everywhere: formatters, the ₹/$ labels on inputs, and whichever tab is showing. */
+function applyCurrency(code) {
+  Money.setCurrency(code);
+  currencySelect.value = Money.code();
+  for (const node of document.querySelectorAll('[data-currency-symbol]')) node.textContent = Money.symbol();
+  window.dispatchEvent(new Event('currencychange'));
+}
+
+currencySelect.addEventListener('change', async () => {
+  try {
+    await window.api.setCurrency(currencySelect.value);
+  } catch (err) {
+    alert(ipcErrorMessage(err));
+  }
+  applyCurrency(currencySelect.value);
+});
+
+window.addEventListener('currencychange', applyFilterAndRender);
 
 // --- Email reminders dialog ---
 const remindersBtn = document.getElementById('remindersBtn');
@@ -857,4 +883,10 @@ mappingCommitBtn.addEventListener('click', async () => {
   await refresh();
 });
 
-refresh();
+// Load the saved currency before the first render, so amounts don't flash in the default one.
+window.api.getCurrency()
+  .catch(() => Money.DEFAULT_CURRENCY)
+  .then((code) => {
+    applyCurrency(code);
+    refresh();
+  });

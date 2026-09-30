@@ -6,6 +6,7 @@
 
 const { maturityStatus, maturityValue, roiPercent } = require('../renderer/portfolioMath.js');
 const { dueStatus, methodLabel, frequencyLabel } = require('../renderer/billsMath.js');
+const { createMoney, DEFAULT_CURRENCY } = require('../renderer/money.js');
 
 const DEFAULT_PREFS = {
   enabled: false,
@@ -105,7 +106,6 @@ function findDueBillReminders(bills, sentKeys, daysBefore, today = new Date()) {
     }));
 }
 
-const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
 function whenText(days) {
   if (days === 0) return 'today';
@@ -146,17 +146,17 @@ ${rows.map((r) => `<tr>${cols.map(([, k]) => `<td style="${cell}">${escapeHtml(r
 }
 
 /** The usual amount, or for a bill that varies, "Varies" with the last payment for reference. */
-function billAmountText(b) {
-  if (b.amount !== null && b.amount !== undefined) return inr.format(b.amount);
-  return b.last_paid_amount == null ? 'Varies' : `Varies (last ${inr.format(b.last_paid_amount)})`;
+function billAmountText(b, money) {
+  if (b.amount !== null && b.amount !== undefined) return money.format(b.amount);
+  return b.last_paid_amount == null ? 'Varies' : `Varies (last ${money.format(b.last_paid_amount)})`;
 }
 
 /** Bill rows for the email: what's due, when, and how it's paid. */
-function billSection(billsDue) {
+function billSection(billsDue, money) {
   const rows = billsDue.map(({ bill: b, days }) => ({
     name: b.name,
     when: `${b.due_date} (${whenText(days)})`,
-    amount: billAmountText(b),
+    amount: billAmountText(b, money),
     paidBy: methodLabel(b.payment_method),
     bank: b.bank_detail ?? '—',
     frequency: frequencyLabel(b.frequency)
@@ -177,12 +177,13 @@ function billSection(billsDue) {
 
 /**
  * One digest email covering every due policy and bill: { subject, text, html }.
- * Either list may be empty, but not both.
+ * Either list may be empty, but not both. Amounts use the display currency.
  */
-function buildReminderEmail(due, billsDue = []) {
+function buildReminderEmail(due, billsDue = [], { currency = DEFAULT_CURRENCY } = {}) {
+  const money = createMoney(currency);
   const subject = reminderSubject(due, billsDue);
-  const policies = due.length ? policySection(due) : { text: [], html: '' };
-  const bills = billsDue.length ? billSection(billsDue) : { text: [], html: '' };
+  const policies = due.length ? policySection(due, money) : { text: [], html: '' };
+  const bills = billsDue.length ? billSection(billsDue, money) : { text: [], html: '' };
   const text = [...policies.text, ...bills.text, FOOTER].join('\n');
   const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;color:#1c1b1a">
 ${[policies.html, bills.html].filter(Boolean).join('\n')}
@@ -192,7 +193,7 @@ ${[policies.html, bills.html].filter(Boolean).join('\n')}
 }
 
 /** Policy rows for the email. */
-function policySection(due) {
+function policySection(due, money) {
   const count = due.length;
 
   const rows = due.map(({ policy: p, days }) => {
@@ -204,9 +205,9 @@ function policySection(due) {
       instrument: p.instrument ?? '',
       institution: [p.institution, p.branch].filter(Boolean).join(', '),
       holder: p.holder ?? '',
-      amount: p.amount_invested === null || p.amount_invested === undefined ? '—' : inr.format(p.amount_invested),
+      amount: p.amount_invested === null || p.amount_invested === undefined ? '—' : money.format(p.amount_invested),
       rate: rate === null ? '—' : `${rate.toFixed(2)}%`,
-      maturityValue: mv.value === null ? '—' : `${mv.calculated ? '≈ ' : ''}${inr.format(mv.value)}`,
+      maturityValue: mv.value === null ? '—' : `${mv.calculated ? '≈ ' : ''}${money.format(mv.value)}`,
       proceedsTo: [p.destination_bank, p.destination_account].filter(Boolean).join(' · ') || '—'
     };
   });

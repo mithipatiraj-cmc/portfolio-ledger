@@ -15,7 +15,6 @@
   const policiesTitle = document.getElementById('taxPoliciesTitle');
   const missingEl = document.getElementById('taxMissing');
 
-  const rupees = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
   const SAVE_DELAY_MS = 400;
 
   let policies = [];
@@ -25,6 +24,9 @@
   const holderRows = new Map(); // holder name → { tr, cells } so typing only updates the computed cells
 
   window.Tabs.onShow('tax', load);
+  window.addEventListener('currencychange', () => {
+    if (!document.getElementById('taxView').hidden) render();
+  });
 
   // --- Data ---
   async function load() {
@@ -107,12 +109,12 @@
     const needRate = result.holders.filter((h) => h.tax === null).length;
     const tax = result.holders.reduce((s, h) => s + (h.tax ?? 0), 0);
     const tiles = [
-      { label: `Interest in ${fyLabel(fyStartYear)}`, value: rupees.format(taxable + exempt) },
-      { label: 'Taxable interest', value: rupees.format(taxable) },
-      { label: 'Tax-exempt interest', value: rupees.format(exempt) },
+      { label: `Interest in ${fyLabel(fyStartYear)}`, value: Money.format(taxable + exempt) },
+      { label: 'Taxable interest', value: Money.format(taxable) },
+      { label: 'Tax-exempt interest', value: Money.format(exempt) },
       {
         label: 'Estimated tax on interest',
-        value: rupees.format(tax),
+        value: Money.format(tax),
         note: needRate ? `${needRate} holder(s) over the limit need a tax rate` : 'across all holders'
       }
     ];
@@ -157,18 +159,18 @@
   }
 
   function fillHolderCells(cells, h) {
-    cells.taxable.textContent = rupees.format(h.taxableInterest);
-    cells.exempt.textContent = rupees.format(h.exemptInterest);
-    cells.total.textContent = rupees.format(h.totalIncome);
+    cells.taxable.textContent = Money.format(h.taxableInterest);
+    cells.exempt.textContent = Money.format(h.exemptInterest);
+    cells.total.textContent = Money.format(h.totalIncome);
     cells.tax.className = 'num';
     if (h.withinLimit) {
-      cells.tax.textContent = `₹0 · within ${rupees.format(rebateLimit())}`;
+      cells.tax.textContent = `${Money.format(0)} · within ${Money.format(rebateLimit())}`;
       cells.tax.classList.add('tax-within');
     } else if (h.tax === null) {
       cells.tax.textContent = 'Enter a tax rate';
       cells.tax.classList.add('tax-unknown');
     } else {
-      cells.tax.textContent = rupees.format(h.tax);
+      cells.tax.textContent = Money.format(h.tax);
     }
   }
 
@@ -180,10 +182,10 @@
     const tr = el('tr');
     tr.append(
       el('td', null, 'Total'), el('td'), el('td'),
-      el('td', 'num', rupees.format(sum('taxableInterest'))),
-      el('td', 'num', rupees.format(sum('exemptInterest'))),
+      el('td', 'num', Money.format(sum('taxableInterest'))),
+      el('td', 'num', Money.format(sum('exemptInterest'))),
       el('td'),
-      el('td', 'num', rupees.format(sum('tax')))
+      el('td', 'num', Money.format(sum('tax')))
     );
     tfoot.append(tr);
     holderTable.append(tfoot);
@@ -211,7 +213,7 @@
           el('td', 'lookup-cell', holder),
           el('td', null, policy.instrument ?? ''),
           income,
-          el('td', 'num', rupees.format(interest)),
+          el('td', 'num', Money.format(interest)),
           cellWith(box, null)
         );
         if (exempt) tr.classList.add('selected');

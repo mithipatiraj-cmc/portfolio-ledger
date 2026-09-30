@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   setIncomeTreatment: (ids, treatment) => ipcRenderer.invoke('policies:setIncomeTreatment', { ids, treatment }),
   setTaxTreatment: (ids, treatment) => ipcRenderer.invoke('policies:setTaxTreatment', { ids, treatment }),
   getTaxSettings: () => ipcRenderer.invoke('tax:getSettings'),
+  getCurrency: () => ipcRenderer.invoke('settings:getCurrency'),
+  setCurrency: (code) => ipcRenderer.invoke('settings:setCurrency', code),
   listBills: (opts) => ipcRenderer.invoke('bills:list', opts),
   addBill: (bill) => ipcRenderer.invoke('bills:add', bill),
   updateBill: (id, bill) => ipcRenderer.invoke('bills:update', { id, bill }),

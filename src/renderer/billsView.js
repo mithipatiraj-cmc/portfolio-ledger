@@ -35,8 +35,8 @@
   const payAdvanceLabel = $('payAdvanceLabel');
   const paymentMessage = $('paymentMessage');
 
-  const rupees = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
-  const rupeesWhole = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+  const money = (n) => Money.format(n, { decimals: 2 });
+  const moneyWhole = (n) => Money.format(n);
   const dateFormat = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
   const formatDate = (iso) => (iso ? dateFormat.format(new Date(`${iso}T00:00:00Z`)) : '');
 
@@ -52,6 +52,12 @@
   }
 
   window.Tabs.onShow('bills', load);
+  window.addEventListener('currencychange', () => {
+    if (document.getElementById('billsView').hidden) return;
+    renderTiles();
+    renderBills();
+    renderPayments();
+  });
   showArchived.addEventListener('change', load);
   historyBill.addEventListener('change', renderPayments);
 
@@ -73,23 +79,23 @@
       { label: 'Bills', value: String(s.billCount) },
       {
         label: 'Monthly from bank, avg',
-        value: rupeesWhole.format(s.monthlyEquivalent),
+        value: moneyWhole(s.monthlyEquivalent),
         note: averageNote(s)
       },
       {
         label: 'Overdue',
         value: String(s.overdueCount),
-        note: s.overdueCount ? rupeesWhole.format(s.overdueAmount) : 'nothing overdue',
+        note: s.overdueCount ? moneyWhole(s.overdueAmount) : 'nothing overdue',
         level: s.overdueCount ? 'overdue' : null
       },
       {
         label: 'Due in the next 7 days',
         value: String(s.dueSoonCount),
-        note: s.dueSoonCount ? rupeesWhole.format(s.dueSoonAmount) : ''
+        note: s.dueSoonCount ? moneyWhole(s.dueSoonAmount) : ''
       },
       {
         label: 'Paid from bank this month',
-        value: rupeesWhole.format(s.paidThisMonth),
+        value: moneyWhole(s.paidThisMonth),
         note: paidNote(s)
       }
     ];
@@ -107,7 +113,7 @@
   function averageNote(s) {
     const parts = [];
     if (s.cardBillCount) {
-      parts.push(`${rupeesWhole.format(s.cardMonthlyEquivalent)}/month on credit cards not included`);
+      parts.push(`${moneyWhole(s.cardMonthlyEquivalent)}/month on credit cards not included`);
     }
     if (s.unknownAmountCount) {
       parts.push(`${s.unknownAmountCount} bill${s.unknownAmountCount === 1 ? '' : 's'} with no amount yet`);
@@ -118,7 +124,7 @@
   function paidNote(s) {
     const count = `${s.paymentsThisMonth} payment${s.paymentsThisMonth === 1 ? '' : 's'}`;
     return s.cardPaymentsThisMonth
-      ? `${count} · ${rupeesWhole.format(s.paidByCardThisMonth)} on credit cards not included`
+      ? `${count} · ${moneyWhole(s.paidByCardThisMonth)} on credit cards not included`
       : count;
   }
 
@@ -144,7 +150,7 @@
 
       const last = el('td', 'num');
       if (bill.last_paid_on) {
-        last.append(rupees.format(bill.last_paid_amount), el('span', 'bill-sub', formatDate(bill.last_paid_on)));
+        last.append(money(bill.last_paid_amount), el('span', 'bill-sub', formatDate(bill.last_paid_on)));
       } else {
         last.append(el('span', 'tax-unknown', 'Not paid yet'));
       }
@@ -165,7 +171,7 @@
       }
 
       const usual = hasAmount(bill.amount)
-        ? el('td', 'num', rupees.format(bill.amount))
+        ? el('td', 'num', money(bill.amount))
         : el('td', 'num tax-unknown', 'Varies');
       tr.append(name, el('td', null, frequencyLabel(bill.frequency)), paidBy, due, usual, last, actions);
       return tr;
@@ -218,14 +224,14 @@
     paymentBody.replaceChildren(...shown.map((p) => {
       const tr = el('tr');
       const remove = button('Delete', 'secondary small', async () => {
-        if (!confirm(`Delete the ${rupees.format(p.amount)} payment for ${p.bill_name} on ${formatDate(p.paid_on)}? This can't be undone. The bill's due date isn't changed.`)) return;
+        if (!confirm(`Delete the ${money(p.amount)} payment for ${p.bill_name} on ${formatDate(p.paid_on)}? This can't be undone. The bill's due date isn't changed.`)) return;
         await window.api.deletePayment(p.id);
         await load();
       });
       tr.append(
         el('td', null, formatDate(p.paid_on)),
         el('td', null, p.bill_name),
-        el('td', 'num', rupees.format(p.amount)),
+        el('td', 'num', money(p.amount)),
         el('td', null, methodLabel(p.payment_method)),
         el('td', 'lookup-cell', p.bank_detail ?? ''),
         el('td', 'lookup-cell', formatDate(p.for_due_date)),
@@ -289,7 +295,7 @@
   function openPaymentModal(bill) {
     payingBill = bill;
     $('paymentModalTitle').textContent = `Record payment · ${bill.name}`;
-    const usual = hasAmount(bill.amount) ? `usually ${rupees.format(bill.amount)}` : 'amount varies';
+    const usual = hasAmount(bill.amount) ? `usually ${money(bill.amount)}` : 'amount varies';
     $('paymentModalSub').textContent =
       `Due ${formatDate(bill.due_date)}, ${usual} (${frequencyLabel(bill.frequency).toLowerCase()}). ` +
       'Saved as a new entry in the payment history.';
@@ -300,7 +306,7 @@
       $('payAmountHelp').textContent = 'The usual amount. Change it if this period’s bill was different.';
     } else if (hasAmount(bill.last_paid_amount)) {
       payFields.amount.value = bill.last_paid_amount;
-      $('payAmountHelp').textContent = `Last time you paid ${rupees.format(bill.last_paid_amount)}. Enter this period’s amount.`;
+      $('payAmountHelp').textContent = `Last time you paid ${money(bill.last_paid_amount)}. Enter this period’s amount.`;
     } else {
       payFields.amount.value = '';
       $('payAmountHelp').textContent = 'Enter the amount paid for this period.';
