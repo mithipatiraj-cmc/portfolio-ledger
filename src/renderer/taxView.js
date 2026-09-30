@@ -1,13 +1,11 @@
 'use strict';
 
-// The Tax projection tab and the tab bar that switches to it. The numbers
-// come from TaxMath; el() and ipcErrorMessage() are shared from renderer.js.
+// The Tax projection tab. The numbers come from TaxMath; el() and
+// ipcErrorMessage() are shared from renderer.js.
 (function () {
   const { DEFAULT_REBATE_LIMIT, financialYearOf, fyLabel, projectTax } = window.TaxMath;
   const { incomeTreatmentLabel } = window.PolicyFilter;
 
-  const tabs = { portfolio: document.getElementById('portfolioTab'), tax: document.getElementById('taxTab') };
-  const views = { portfolio: document.getElementById('portfolioView'), tax: document.getElementById('taxView') };
   const yearSelect = document.getElementById('taxYear');
   const rebateInput = document.getElementById('taxRebateLimit');
   const tilesEl = document.getElementById('taxTiles');
@@ -26,27 +24,7 @@
   let saveTimer = null;
   const holderRows = new Map(); // holder name → { tr, cells } so typing only updates the computed cells
 
-  // --- Tabs ---
-  function showTab(name) {
-    for (const [key, tab] of Object.entries(tabs)) {
-      const active = key === name;
-      tab.classList.toggle('active', active);
-      tab.setAttribute('aria-selected', String(active));
-      tab.tabIndex = active ? 0 : -1;
-      views[key].hidden = !active;
-    }
-    if (name === 'tax') load();
-  }
-
-  for (const [name, tab] of Object.entries(tabs)) {
-    tab.addEventListener('click', () => showTab(name));
-    tab.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      const next = name === 'portfolio' ? 'tax' : 'portfolio';
-      showTab(next);
-      tabs[next].focus();
-    });
-  }
+  window.Tabs.onShow('tax', load);
 
   // --- Data ---
   async function load() {

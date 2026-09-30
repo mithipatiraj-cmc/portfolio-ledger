@@ -21,13 +21,15 @@ function freshDb() {
   return initDb(':memory:');
 }
 
-test('schema creates the data, settings and reminder-log tables', () => {
+test('schema creates the data, bills, settings and reminder-log tables', () => {
   const db = freshDb();
   const tables = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     .all()
     .map((r) => r.name);
-  assert.deepEqual(tables, ['destinations', 'institutions', 'people', 'policies', 'reminder_log', 'settings']);
+  assert.deepEqual(tables, [
+    'bill_payments', 'bills', 'destinations', 'institutions', 'people', 'policies', 'reminder_log', 'settings'
+  ]);
 });
 
 test('addPolicy resolves lookups and round-trips through listPolicies', () => {

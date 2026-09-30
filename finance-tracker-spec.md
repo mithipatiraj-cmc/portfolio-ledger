@@ -1,6 +1,6 @@
 # Finance Tracker — First-Pass Spec
 
-Covers: data model (from your existing Excel), Excel import service, edit UX, and the recommendation engine's first version.
+Covers: data model (from your existing Excel), Excel import service, edit UX, the recommendation engine's first version, and the bills & expenses tracker (§7).
 
 ---
 
@@ -196,6 +196,7 @@ flowchart TB
         UI --> Dashboard["Dashboard &amp; charts<br/>(summary, allocation, alerts)"]
         UI --> ImportUI["Excel import wizard<br/>(upload → map → preview → commit)"]
         UI --> AIButton["'Get AI suggestions' action"]
+        UI --> BillsTab["Bills tab<br/>(bills + payment history)"]
     end
 
     subgraph PRELOAD["Preload Script"]
@@ -255,6 +256,91 @@ Once the app works in development (`electron .` / `npm run dev`), it needs to be
 
 ---
 
+## 7. Bills & Expenses Tracker
+
+**Goal:** keep track of recurring bills, expenses and items (rent, electricity,
+insurance premiums, …): what's due when, how each is paid, and a permanent
+record of every payment so past payments can be looked up.
+
+**Where it lives:** its own **Bills** tab, next to Portfolio and Tax
+projection. It shares the same SQLite database, backup/restore and
+`DB_RESET` behaviour (a reset clears bills and payments along with policies).
+
+### 7a. Data model
+
+A **bill** is anything paid on a schedule:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `name` | string | e.g. "Electricity" — required |
+| `frequency` | enum | `monthly`, `bimonthly` (every 2 months), `quarterly`, `semiannual` (every 6 months), `annual` — defaults to monthly |
+| `paymentMethod` | enum | `bank_transfer` (direct bank payment) or `check` (check deposit) |
+| `bankDetail` | string | Bank/account for the payment — **required for a check deposit**, optional for a bank payment |
+| `dueDate` | date | The **next** due date |
+| `amount` | number | The amount normally due |
+| last payment | derived | Most recent payment's date and amount — read from the history, not stored on the bill, so the two can't disagree |
+
+A **payment** is a new row every time, never overwritten:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `paidOn` | date | Required |
+| `amount` | number | Required, > 0 — can differ from the bill's usual amount |
+| `paymentMethod`, `bankDetail` | as above | Copied from the bill when recording (editable), so history stays accurate if the bill's method changes later |
+| `forDueDate` | date | The due date this payment settled |
+| `note` | string, optional | e.g. cheque number or reference |
+
+```sql
+CREATE TABLE bills (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  frequency TEXT NOT NULL DEFAULT 'monthly'
+    CHECK (frequency IN ('monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual')),
+  payment_method TEXT NOT NULL CHECK (payment_method IN ('bank_transfer', 'check')),
+  bank_detail TEXT,
+  due_date TEXT NOT NULL,    -- next due date
+  due_day INTEGER NOT NULL,  -- day of month it falls due (1–31)
+  amount REAL NOT NULL,
+  archived_at TEXT           -- archived bills keep their history
+);
+
+CREATE TABLE bill_payments (
+  id INTEGER PRIMARY KEY,
+  bill_id INTEGER NOT NULL REFERENCES bills(id),
+  paid_on TEXT NOT NULL,
+  amount REAL NOT NULL,
+  payment_method TEXT NOT NULL CHECK (payment_method IN ('bank_transfer', 'check')),
+  bank_detail TEXT,
+  for_due_date TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+### 7b. Behaviour
+
+- **Recording a payment** inserts a `bill_payments` row and, in the same
+  transaction, moves `due_date` on by the bill's frequency. The user can untick
+  that for a one-off payment.
+- **Due dates keep their day of month:** `due_day` remembers the original day,
+  so a bill due on the 31st goes 31 Jan → 28 Feb → 31 Mar rather than drifting
+  to the 28th.
+- **Archive, don't delete:** archiving hides a bill but keeps it and its
+  history; it can be restored. A single payment entered by mistake can be
+  deleted (the due date is left as it is).
+- **Summary tiles:** bill count; average cost per month (amount ÷ months per
+  period, so a ₹12,000 yearly bill counts as ₹1,000); overdue; due within 7
+  days; and paid this calendar month (from the history).
+- **Payment history** lists every payment newest first, filterable by bill.
+
+### 7c. Possible next steps
+
+- Email reminders before a bill is due, reusing the maturity-reminder scheduler
+- Variable bills: suggest the amount from the last few payments
+- Yearly spend per bill and a chart of spending by month
+
+---
+
 ## Suggested build order for this slice
 
 1. Finalize the `expected` field's meaning — ✅ done (destination bank/account, see §1)
@@ -263,3 +349,4 @@ Once the app works in development (`electron .` / `npm run dev`), it needs to be
 4. Inline-editable table view
 5. Recommendation engine v1, using the three recommendation types above (§4)
 6. Package for distribution (§6)
+7. Bills & expenses tracker (§7)

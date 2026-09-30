@@ -186,7 +186,7 @@
 <div class="wrap">
   <header>
     <h1>Finance Tracker — Development Roadmap</h1>
-    <p>A local, offline, browser-based app to track investment accounts across institutions — expiry, nominee, amount, returns, and payment frequency. Check off tasks as you go; your progress is saved in this browser.</p>
+    <p>A local, offline desktop app to track investment accounts across institutions — expiry, nominee, amount, returns, and payment frequency — plus recurring bills and their payment history. Check off tasks as you go; your progress is saved in this browser.</p>
   </header>
 
   <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -283,6 +283,22 @@ const PHASES = [
       "Scope the recommendation engine's first version narrowly: e.g. flag expiring/underperforming accounts and suggest diversification — avoid vague 'general advice' prompts",
       "Design the prompt to send only the summarized data needed (totals, allocations, expiry windows) rather than raw account records with names",
       "Add a visible indicator whenever a network call to the AI is about to happen, so it's never silent"
+    ]
+  },
+  {
+    // Added after the others: progress is saved by phase id and task position,
+    // so new tasks go in a new phase (or at the end of one), never in the middle.
+    id: "p7",
+    title: "Phase 7 — Bills & expenses",
+    sub: "Track recurring bills and every payment made on them (spec §7)",
+    color: "#2a7f8a",
+    tasks: [
+      "Add bills and bill_payments tables: name, frequency (monthly, every 2 months, quarterly, every 6 months, yearly), payment method (direct bank payment or check deposit with bank details), next due date, amount",
+      "Bills tab with add / edit / archive, due-date badges (overdue, due within 7 days) and summary tiles (per-month average, overdue, due soon, paid this month)",
+      "Record payment: save every payment as a new history entry and move the due date on by the bill's frequency (optional for one-off payments)",
+      "Show each bill's last payment from the history, and a payment history view filterable by bill for looking up past payments",
+      "Email reminders before a bill is due, reusing the maturity-reminder scheduler",
+      "Spending insights: yearly spend per bill and a month-by-month chart"
     ]
   }
 ];

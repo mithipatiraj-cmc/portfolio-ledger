@@ -127,6 +127,17 @@ async function start() {
   ipcMain.handle('policies:setTaxTreatment', (_event, { ids, treatment }) =>
     db.setTaxTreatment(database, ids, treatment));
 
+  // --- Bills and their payment history ---
+  ipcMain.handle('bills:list', (_event, opts) => db.listBills(database, opts));
+  ipcMain.handle('bills:add', (_event, bill) => db.addBill(database, bill));
+  ipcMain.handle('bills:update', (_event, { id, bill }) => db.updateBill(database, id, bill));
+  ipcMain.handle('bills:archive', (_event, id) => db.archiveBill(database, id));
+  ipcMain.handle('bills:restore', (_event, id) => db.restoreBill(database, id));
+  ipcMain.handle('bills:recordPayment', (_event, { billId, payment, options }) =>
+    db.recordPayment(database, billId, payment, options));
+  ipcMain.handle('bills:payments', (_event, opts) => db.listPayments(database, opts));
+  ipcMain.handle('bills:deletePayment', (_event, id) => db.deletePayment(database, id));
+
   // --- Tax projection inputs: the rebate limit plus each holder's rate and other income ---
   ipcMain.handle('tax:getSettings', () => db.getSetting(database, TAX_SETTINGS_KEY, {}));
   ipcMain.handle('tax:saveSettings', (_event, settings) => {

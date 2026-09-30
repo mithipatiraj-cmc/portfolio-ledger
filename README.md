@@ -2,8 +2,12 @@
 
 Local, offline desktop app for tracking investment accounts (FDs, policies,
 bonds, etc.) across institutions — expiry, nominee, amount, returns, and
-payment frequency. All data stays on your machine in a SQLite file; nothing
-is synced to the cloud.
+payment frequency — plus a tax projection on the interest and a tracker for
+recurring bills and their payment history. All data stays on your machine in
+a SQLite file; nothing is synced to the cloud.
+
+The app has three tabs: **Portfolio** (your investments), **Tax projection**
+and **Bills**.
 
 See the full spec and roadmap for design context. This repo currently
 implements Phase 1 (core data + CRUD + Excel import).
@@ -46,6 +50,42 @@ Re-running the import later is safe: unchanged rows are skipped, changed
 rows update the existing policy (matched by Policy No), and new rows are
 added. Rows missing a required field (Policy No, Institution, Amount,
 Maturity Date) are reported back, not silently dropped.
+
+## Tax projection
+
+The **Tax projection** tab estimates the tax on your interest for an Indian
+financial year (April–March). Each policy is taxed to its holder, joint
+policies included. Enter each holder's other income and tax rate (include
+cess, e.g. 31.2 for the 30% slab); if their total income is within the
+section 87A limit (₹12 lakh by default, editable) the tax is nil. Tick
+**Tax-exempt** on a policy (e.g. PPF) to leave its interest untaxed.
+
+## Bills
+
+The **Bills** tab tracks recurring bills and expenses (rent, electricity,
+insurance, …) and every payment you make on them.
+
+- **Add bill**: a name, how often it's due (monthly, every 2 months,
+  quarterly, every 6 months or yearly), the amount, the next due date, and how
+  it's paid: **direct bank payment** or **check deposit**. Bank details are
+  required for a check deposit (the account it's deposited into) and optional
+  for a bank payment.
+- **Record payment** saves a new entry in the payment history with the date,
+  amount, method, bank details and an optional note (e.g. a cheque number),
+  and moves the bill's due date on by its frequency. Untick that for a one-off
+  payment. A bill due on the 31st falls on the last day of shorter months and
+  returns to the 31st after.
+- **Last payment** on each bill is its most recent entry in the history, so it
+  always matches it. Payments are never overwritten; each keeps the method and
+  bank used at the time, even if the bill changes later.
+- **Payment history** lists every payment, newest first; pick a bill (or use
+  its **History** button) to look up just its payments. A payment entered by
+  mistake can be deleted.
+- **Archive** hides a bill you no longer pay but keeps its history; turn on
+  **Show archived** to see or restore it.
+- The tiles show the average cost per month (a ₹12,000 yearly bill counts as
+  ₹1,000), what's overdue or due in the next 7 days, and what you paid this
+  month.
 
 ## Email reminders before maturity (optional)
 
@@ -157,12 +197,12 @@ is required with ad-hoc signing so Electron's own framework still loads, and
 npm test
 ```
 
-Runs the data-layer (`src/main/db.js`) and Excel-import
-(`src/import/excelImport.js`, `src/import/importRunner.js`) test suites
-using Node's built-in test runner — 27 tests, no external test framework
-needed. These cover everything except the Electron GUI itself (window
-creation, IPC wiring, the file-picker dialog), which can only be exercised
-by actually running the app.
+Runs every suite in `test/` with Node's built-in test runner, no external
+test framework needed: the data layer (`db.js`), Excel import, reminders and
+scheduling, filtering, and the portfolio, tax and bills calculations. These
+cover everything except the Electron GUI itself (window creation, IPC wiring,
+the file-picker dialog), which can only be exercised by actually running the
+app.
 
 ## Known items to address
 
@@ -186,6 +226,11 @@ src/
   main/         Electron main process: window creation, IPC handlers, SQLite (db.js)
   import/       Excel parsing (excelImport.js) and import-commit logic (importRunner.js)
                 — both plain Node modules, independent of Electron, fully unit tested
-  renderer/     UI: index.html, renderer.js, styles.css
-test/           Node test-runner suites for db.js, excelImport.js, importRunner.js
+  renderer/     UI: index.html, styles.css, tabs.js (section tabs), and per tab:
+                  Portfolio: renderer.js, filterPolicies.js, portfolioMath.js
+                  Tax projection: taxView.js, taxMath.js
+                  Bills: billsView.js, billsMath.js
+                — the *Math.js / filterPolicies.js files are pure and unit tested
+  shared/       Rules used by both processes (name casing, policy rules)
+test/           Node test-runner suites, one per module
 ```

@@ -3,12 +3,15 @@
 const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 const { toTitleCase } = require('../shared/nameCase.js');
+const { PAYMENT_METHODS, FREQUENCY_VALUES, nextDueDate } = require('../renderer/billsMath.js');
 const { INCOME_TREATMENTS, TAX_TREATMENTS, isMaturityDateRequired, isBlank } = require('../shared/policyRules.js');
 
 const FD_MATURITY_ERROR = 'Maturity date is required for fixed deposits.';
 const oneOf = (column, values) => `CHECK (${column} IN (${values.map((v) => `'${v}'`).join(', ')}))`;
 const INCOME_TREATMENT_CHECK = oneOf('income_treatment', INCOME_TREATMENTS);
 const TAX_TREATMENT_CHECK = oneOf('tax_treatment', TAX_TREATMENTS);
+const PAYMENT_METHOD_CHECK = oneOf('payment_method', PAYMENT_METHODS);
+const FREQUENCY_CHECK = oneOf('frequency', FREQUENCY_VALUES);
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS institutions (
@@ -50,6 +53,35 @@ CREATE TABLE IF NOT EXISTS policies (
   tax_treatment TEXT ${TAX_TREATMENT_CHECK}, -- NULL = taxable
   deleted_at TEXT -- soft delete: set when the user deletes, NULL while active
 );
+
+-- Bills / expenses. due_date is the next one, moved on by frequency when paid;
+-- due_day keeps the day of month it falls on, so the 31st goes 28 Feb → 31 Mar.
+CREATE TABLE IF NOT EXISTS bills (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  frequency TEXT NOT NULL DEFAULT 'monthly' ${FREQUENCY_CHECK},
+  payment_method TEXT NOT NULL ${PAYMENT_METHOD_CHECK},
+  bank_detail TEXT, -- required for check deposits
+  due_date TEXT NOT NULL,
+  due_day INTEGER NOT NULL CHECK (due_day BETWEEN 1 AND 31),
+  amount REAL NOT NULL,
+  archived_at TEXT -- archived bills keep their payment history
+);
+
+-- Every payment ever made, one row each, never overwritten. The method and
+-- bank are copied from the bill at the time, so history stays accurate later.
+CREATE TABLE IF NOT EXISTS bill_payments (
+  id INTEGER PRIMARY KEY,
+  bill_id INTEGER NOT NULL REFERENCES bills(id),
+  paid_on TEXT NOT NULL,
+  amount REAL NOT NULL,
+  payment_method TEXT NOT NULL ${PAYMENT_METHOD_CHECK},
+  bank_detail TEXT,
+  for_due_date TEXT, -- the due date this payment settled
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS bill_payments_by_bill ON bill_payments (bill_id, paid_on);
 
 -- User preferences (e.g. email reminders), one JSON value per key.
 CREATE TABLE IF NOT EXISTS settings (
@@ -194,6 +226,8 @@ function recreateDbSchema(db) {
 
   // Settings (preferences) survive a reset; the reminder log refers to policy ids, so it goes.
   db.exec(`
+    DROP TABLE IF EXISTS bill_payments;
+    DROP TABLE IF EXISTS bills;
     DROP TABLE IF EXISTS reminder_log;
     DROP TABLE IF EXISTS policies;
     DROP TABLE IF EXISTS institutions;
@@ -470,6 +504,136 @@ function getPortfolioSummary(db, { upcomingWithinDays = 30 } = {}) {
 }
 
 /** Stored preference for key (parsed JSON), or fallback when unset. */
+// --- Monthly bills ---
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Check a bill from the form and put it in column shape. Throws with a message for the user. */
+function billColumns(b) {
+  const name = String(b.name ?? '').trim();
+  const method = b.paymentMethod;
+  const bankDetail = String(b.bankDetail ?? '').trim() || null;
+  const dueDate = String(b.dueDate ?? '').trim();
+  const amount = Number(b.amount);
+  const frequency = b.frequency ?? 'monthly';
+  if (!name) throw new Error('Give the bill a name.');
+  if (!FREQUENCY_VALUES.includes(frequency)) throw new Error('Choose how often the bill is paid.');
+  if (!PAYMENT_METHODS.includes(method)) throw new Error('Choose how the bill is paid.');
+  if (method === 'check' && !bankDetail) throw new Error('Enter the bank details for the check deposit.');
+  if (!ISO_DATE.test(dueDate)) throw new Error('Enter the due date.');
+  if (b.amount === '' || b.amount == null || !(amount >= 0)) throw new Error('Enter the amount due.');
+  return {
+    name, frequency, payment_method: method, bank_detail: bankDetail,
+    due_date: dueDate, due_day: Number(dueDate.slice(8)), amount
+  };
+}
+
+function addBill(db, b) {
+  const c = billColumns(b);
+  const info = db
+    .prepare(
+      `INSERT INTO bills (name, frequency, payment_method, bank_detail, due_date, due_day, amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(c.name, c.frequency, c.payment_method, c.bank_detail, c.due_date, c.due_day, c.amount);
+  return Number(info.lastInsertRowid);
+}
+
+function updateBill(db, id, b) {
+  const c = billColumns(b);
+  const info = db
+    .prepare(
+      `UPDATE bills SET name = ?, frequency = ?, payment_method = ?, bank_detail = ?, due_date = ?, due_day = ?, amount = ?
+       WHERE id = ?`
+    )
+    .run(c.name, c.frequency, c.payment_method, c.bank_detail, c.due_date, c.due_day, c.amount, id);
+  return Number(info.changes) > 0;
+}
+
+/** Hide a bill from the list but keep it and its payment history. */
+function archiveBill(db, id) {
+  const info = db.prepare("UPDATE bills SET archived_at = datetime('now') WHERE id = ? AND archived_at IS NULL").run(id);
+  return Number(info.changes) > 0;
+}
+
+function restoreBill(db, id) {
+  const info = db.prepare('UPDATE bills SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL').run(id);
+  return Number(info.changes) > 0;
+}
+
+/** Bills soonest-due first, each with its most recent payment (last_paid_on / last_paid_amount). */
+function listBills(db, { includeArchived = false } = {}) {
+  return db
+    .prepare(
+      `SELECT b.*, lp.paid_on AS last_paid_on, lp.amount AS last_paid_amount,
+              (SELECT COUNT(*) FROM bill_payments WHERE bill_id = b.id) AS payment_count
+       FROM bills b
+       LEFT JOIN bill_payments lp ON lp.id = (
+         SELECT id FROM bill_payments WHERE bill_id = b.id ORDER BY paid_on DESC, id DESC LIMIT 1
+       )
+       ${includeArchived ? '' : 'WHERE b.archived_at IS NULL'}
+       ORDER BY b.archived_at IS NOT NULL, b.due_date, b.name`
+    )
+    .all();
+}
+
+/**
+ * Save a payment as a new history row and, unless advanceDueDate is false,
+ * move the bill's due date on by its frequency. Method and bank default to the bill's.
+ * Returns the payment id.
+ */
+function recordPayment(db, billId, p, { advanceDueDate = true } = {}) {
+  return inTransaction(db, () => {
+    const bill = db.prepare('SELECT * FROM bills WHERE id = ?').get(billId);
+    if (!bill) throw new Error('That bill no longer exists.');
+    const paidOn = String(p.paidOn ?? '').trim();
+    const amount = Number(p.amount);
+    const method = p.paymentMethod ?? bill.payment_method;
+    const bankDetail = String(p.bankDetail ?? bill.bank_detail ?? '').trim() || null;
+    if (!ISO_DATE.test(paidOn)) throw new Error('Enter the date it was paid.');
+    if (p.amount === '' || p.amount == null || !(amount > 0)) throw new Error('Enter the amount paid.');
+    if (!PAYMENT_METHODS.includes(method)) throw new Error('Choose how it was paid.');
+    if (method === 'check' && !bankDetail) throw new Error('Enter the bank details for the check deposit.');
+
+    const info = db
+      .prepare(
+        `INSERT INTO bill_payments (bill_id, paid_on, amount, payment_method, bank_detail, for_due_date, note)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(billId, paidOn, amount, method, bankDetail, bill.due_date, String(p.note ?? '').trim() || null);
+    if (advanceDueDate) {
+      db.prepare('UPDATE bills SET due_date = ? WHERE id = ?').run(nextDueDate(bill.due_date, bill.due_day, bill.frequency), billId);
+    }
+    return Number(info.lastInsertRowid);
+  });
+}
+
+/** Payment history, newest first: one bill's (billId), and/or those paid on or after from. */
+function listPayments(db, { billId, from } = {}) {
+  const where = [];
+  const params = [];
+  if (billId !== undefined) {
+    where.push('p.bill_id = ?');
+    params.push(billId);
+  }
+  if (from) {
+    where.push('p.paid_on >= ?');
+    params.push(from);
+  }
+  return db
+    .prepare(
+      `SELECT p.*, b.name AS bill_name FROM bill_payments p JOIN bills b ON b.id = p.bill_id
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY p.paid_on DESC, p.id DESC`
+    )
+    .all(...params);
+}
+
+/** Remove a payment entered by mistake. The bill's due date is left as it is. */
+function deletePayment(db, id) {
+  return Number(db.prepare('DELETE FROM bill_payments WHERE id = ?').run(id).changes) > 0;
+}
+
 function getSetting(db, key, fallback = null) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? JSON.parse(row.value) : fallback;
@@ -521,6 +685,14 @@ module.exports = {
   restorePolicy,
   listPolicies,
   getPortfolioSummary,
+  addBill,
+  updateBill,
+  archiveBill,
+  restoreBill,
+  listBills,
+  recordPayment,
+  listPayments,
+  deletePayment,
   getSetting,
   setSetting,
   listSentReminders,

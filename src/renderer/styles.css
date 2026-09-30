@@ -574,4 +574,40 @@ button.link-btn:hover { text-decoration: underline; }
 
 .rem-message.error { background: var(--crit-bg); color: var(--crit-ink); }
 
+.form-message {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.83rem;
+  background: var(--crit-bg);
+  color: var(--crit-ink);
+}
+
+.form-grid input[type="number"],
+.form-grid input[type="date"],
+.form-grid select {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+/* --- Bills --- */
+#billTable td.actions { white-space: nowrap; text-align: right; }
+#billTable td.actions button + button { margin-left: 6px; }
+.bill-sub { display: block; color: var(--muted); font-size: 0.78rem; }
+.badge.overdue { background: var(--crit-bg); color: var(--crit-ink); }
+.badge.soon { background: var(--warn-bg); color: var(--warn-ink); }
+.history-panel { margin-top: 16px; }
+.history-filter { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-2); }
+.advance-row { margin: 14px 0 0; font-weight: 400; }
+tr.archived td { color: var(--muted); }
+button.small { padding: 4px 10px; font-size: 0.8rem; }
+.tile-value.tile-alert { color: var(--crit-ink); }
+#paymentTable td.actions { text-align: right; }
+
 .modal-actions .spacer { flex: 1; }

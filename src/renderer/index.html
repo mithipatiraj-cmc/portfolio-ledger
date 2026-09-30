@@ -17,8 +17,9 @@
     <div class="header-title">
       <h1>Portfolio Ledger</h1>
       <nav class="tabs" role="tablist" aria-label="Sections">
-        <button class="tab active" role="tab" id="portfolioTab" aria-controls="portfolioView" aria-selected="true">Portfolio</button>
-        <button class="tab" role="tab" id="taxTab" aria-controls="taxView" aria-selected="false" tabindex="-1">Tax projection</button>
+        <button class="tab active" role="tab" id="portfolioTab" data-tab="portfolio" aria-controls="portfolioView" aria-selected="true">Portfolio</button>
+        <button class="tab" role="tab" id="taxTab" data-tab="tax" aria-controls="taxView" aria-selected="false" tabindex="-1">Tax projection</button>
+        <button class="tab" role="tab" id="billsTab" data-tab="bills" aria-controls="billsView" aria-selected="false" tabindex="-1">Bills</button>
       </nav>
     </div>
     <div class="header-actions">
@@ -150,6 +151,119 @@
     </section>
   </main>
 
+  <main id="billsView" role="tabpanel" aria-labelledby="billsTab" hidden>
+    <div class="toolbar">
+      <button id="addBillBtn">+ Add bill</button>
+      <label class="toggle"><input id="showArchivedBills" type="checkbox"> Show archived</label>
+    </div>
+
+    <section id="billTiles" class="tiles" aria-label="Bills summary"></section>
+
+    <table id="billTable">
+      <thead>
+        <tr>
+          <th>Bill</th>
+          <th>How often</th>
+          <th>Paid by</th>
+          <th>Next due</th>
+          <th class="num">Amount</th>
+          <th class="num">Last payment</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <section class="panel history-panel">
+      <div class="panel-head">
+        <h2>Payment history</h2>
+        <label class="history-filter">Show
+          <select id="historyBill"></select>
+        </label>
+      </div>
+      <table id="paymentTable" class="tax-table">
+        <thead>
+          <tr>
+            <th>Paid on</th>
+            <th>Bill</th>
+            <th class="num">Amount</th>
+            <th>Paid by</th>
+            <th>Bank details</th>
+            <th>For due date</th>
+            <th>Note</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="billModal" class="modal-overlay hidden">
+    <form id="billForm" class="modal" novalidate>
+      <h2 id="billModalTitle">Add bill</h2>
+      <div class="form-grid">
+        <label for="billName">Bill / expense</label>
+        <input id="billName" type="text" placeholder="e.g. Electricity" autocomplete="off">
+
+        <label for="billFrequency">How often</label>
+        <select id="billFrequency"></select>
+
+        <label for="billAmount">Amount due (₹)</label>
+        <input id="billAmount" type="number" min="0" step="0.01" inputmode="decimal">
+
+        <label for="billDueDate">Next due date</label>
+        <div>
+          <input id="billDueDate" type="date">
+          <div class="field-help">Recording a payment moves this on by the frequency above.</div>
+        </div>
+
+        <label for="billMethod">Paid by</label>
+        <select id="billMethod"></select>
+
+        <label for="billBank">Bank details</label>
+        <div>
+          <input id="billBank" type="text" placeholder="e.g. HDFC ••1234" autocomplete="off">
+          <div class="field-help" id="billBankHelp"></div>
+        </div>
+      </div>
+      <div id="billMessage" class="form-message error" role="alert" hidden></div>
+      <div class="modal-actions">
+        <button type="button" id="billCancelBtn" class="secondary">Cancel</button>
+        <button type="submit" id="billSaveBtn">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="paymentModal" class="modal-overlay hidden">
+    <form id="paymentForm" class="modal" novalidate>
+      <h2 id="paymentModalTitle">Record payment</h2>
+      <p class="modal-sub" id="paymentModalSub"></p>
+      <div class="form-grid">
+        <label for="payDate">Paid on</label>
+        <input id="payDate" type="date">
+
+        <label for="payAmount">Amount paid (₹)</label>
+        <input id="payAmount" type="number" min="0" step="0.01" inputmode="decimal">
+
+        <label for="payMethod">Paid by</label>
+        <select id="payMethod"></select>
+
+        <label for="payBank">Bank details</label>
+        <input id="payBank" type="text" autocomplete="off">
+
+        <label for="payNote">Note</label>
+        <input id="payNote" type="text" placeholder="Optional, e.g. cheque no. or reference" autocomplete="off">
+      </div>
+      <label class="check-row advance-row"><input id="payAdvance" type="checkbox" checked> <span id="payAdvanceLabel"></span></label>
+      <div id="paymentMessage" class="form-message error" role="alert" hidden></div>
+      <div class="modal-actions">
+        <button type="button" id="paymentCancelBtn" class="secondary">Cancel</button>
+        <button type="submit" id="paymentSaveBtn">Save payment</button>
+      </div>
+    </form>
+  </div>
+
   <div id="chartTooltip" class="chart-tooltip" role="tooltip" hidden></div>
 
   <div id="mappingModal" class="modal-overlay hidden">
@@ -230,7 +344,10 @@
   <script src="filterPolicies.js"></script>
   <script src="portfolioMath.js"></script>
   <script src="taxMath.js"></script>
+  <script src="billsMath.js"></script>
   <script src="renderer.js"></script>
+  <script src="tabs.js"></script>
   <script src="taxView.js"></script>
+  <script src="billsView.js"></script>
 </body>
 </html>
