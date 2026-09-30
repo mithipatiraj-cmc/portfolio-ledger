@@ -66,13 +66,17 @@ The **Bills** tab tracks recurring bills and expenses (rent, electricity,
 insurance, …) and every payment you make on them.
 
 - **Add bill**: a name, how often it's due (monthly, every 2 months,
-  quarterly, every 6 months or yearly), the amount, the next due date, and how
-  it's paid: **direct bank payment** or **check deposit**. Bank details are
+  quarterly, every 6 months or yearly), the next due date, how it's paid
+  (**direct bank payment** or **check deposit**) and, optionally, the usual
+  amount. Leave the amount blank for bills that vary from one period to the
+  next (phone, electricity); they show as **Varies**. Bank details are
   required for a check deposit (the account it's deposited into) and optional
   for a bank payment.
 - **Record payment** saves a new entry in the payment history with the date,
-  amount, method, bank details and an optional note (e.g. a cheque number),
-  and moves the bill's due date on by its frequency. Untick that for a one-off
+  the amount actually paid, method, bank details and an optional note (e.g. a
+  cheque number). The amount starts from the bill's usual amount, or for a
+  bill that varies, the last payment; change it to what you paid this time. It
+  also moves the bill's due date on by its frequency. Untick that for a one-off
   payment. A bill due on the 31st falls on the last day of shorter months and
   returns to the 31st after.
 - **Last payment** on each bill is its most recent entry in the history, so it
@@ -84,8 +88,8 @@ insurance, …) and every payment you make on them.
 - **Archive** hides a bill you no longer pay but keeps its history; turn on
   **Show archived** to see or restore it.
 - The tiles show the average cost per month (a ₹12,000 yearly bill counts as
-  ₹1,000), what's overdue or due in the next 7 days, and what you paid this
-  month.
+  ₹1,000; a bill that varies counts at its last payment), what's overdue or
+  due in the next 7 days, and what you paid this month.
 
 ## Email reminders before maturity and bill due dates (optional)
 

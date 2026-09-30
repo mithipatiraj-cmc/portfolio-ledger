@@ -277,7 +277,7 @@ A **bill** is anything paid on a schedule:
 | `paymentMethod` | enum | `bank_transfer` (direct bank payment) or `check` (check deposit) |
 | `bankDetail` | string | Bank/account for the payment — **required for a check deposit**, optional for a bank payment |
 | `dueDate` | date | The **next** due date |
-| `amount` | number | The amount normally due |
+| `amount` | number, optional | The usual amount. Blank for bills that vary between periods; the amount actually paid is always entered per payment |
 | last payment | derived | Most recent payment's date and amount — read from the history, not stored on the bill, so the two can't disagree |
 
 A **payment** is a new row every time, never overwritten:
@@ -285,7 +285,7 @@ A **payment** is a new row every time, never overwritten:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `paidOn` | date | Required |
-| `amount` | number | Required, > 0 — can differ from the bill's usual amount |
+| `amount` | number | Required, > 0 — what was actually paid this period. Prefilled from the bill's usual amount, or for a bill that varies, its last payment |
 | `paymentMethod`, `bankDetail` | as above | Copied from the bill when recording (editable), so history stays accurate if the bill's method changes later |
 | `forDueDate` | date | The due date this payment settled |
 | `note` | string, optional | e.g. cheque number or reference |
@@ -300,7 +300,7 @@ CREATE TABLE bills (
   bank_detail TEXT,
   due_date TEXT NOT NULL,    -- next due date
   due_day INTEGER NOT NULL,  -- day of month it falls due (1–31)
-  amount REAL NOT NULL,
+  amount REAL,               -- usual amount; NULL when it varies
   archived_at TEXT           -- archived bills keep their history
 );
 
@@ -329,8 +329,11 @@ CREATE TABLE bill_payments (
   history; it can be restored. A single payment entered by mistake can be
   deleted (the due date is left as it is).
 - **Summary tiles:** bill count; average cost per month (amount ÷ months per
-  period, so a ₹12,000 yearly bill counts as ₹1,000); overdue; due within 7
-  days; and paid this calendar month (from the history).
+  period, so a ₹12,000 yearly bill counts as ₹1,000; a bill with no usual
+  amount counts at its last payment, and one never paid isn't counted);
+  overdue; due within 7 days; and paid this calendar month (from the history).
+- **Variable amounts:** a bill's usual amount is optional. Reminder emails show
+  "Varies" with the last payment for reference.
 - **Payment history** lists every payment newest first, filterable by bill.
 
 ### 7c. Email reminders
@@ -347,7 +350,7 @@ paid before its reminder is never reminded. Overdue bills aren't reminded.
 ### 7d. Possible next steps
 
 - A reminder for bills that go overdue unpaid
-- Variable bills: suggest the amount from the last few payments
+- Variable bills: suggest the amount from an average of the last few payments, rather than just the last one
 - Yearly spend per bill and a chart of spending by month
 
 ---

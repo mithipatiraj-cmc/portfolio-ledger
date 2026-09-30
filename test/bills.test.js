@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../src/main/db.js');
-const { nextDueDate, dueStatus, summarizeBills, methodLabel, frequencyLabel } = require('../src/renderer/billsMath.js');
+const { nextDueDate, dueStatus, summarizeBills, methodLabel, frequencyLabel, expectedAmount } = require('../src/renderer/billsMath.js');
 
 const TODAY = new Date(2026, 8, 30); // 30 Sep 2026, local time
 const electricity = { name: 'Electricity', paymentMethod: 'bank_transfer', dueDate: '2026-10-05', amount: 2400 };
@@ -45,18 +45,32 @@ test('summarizeBills totals active bills, what is overdue or due soon, and payme
     billCount: 3, monthlyEquivalent: 1800, // 1000 + 500 + 3600/12
     overdueCount: 1, overdueAmount: 1000,
     dueSoonCount: 1, dueSoonAmount: 500,
-    paidThisMonth: 700, paymentsThisMonth: 1
+    paidThisMonth: 700, paymentsThisMonth: 1, unknownAmountCount: 0
   });
 });
 
-test('addBill validates the form: name, method, bank details for checks, due date and amount', () => {
+test('summarizeBills counts a bill whose amount varies at its last payment, and flags ones with neither', () => {
+  const bills = [
+    { amount: null, last_paid_amount: 1200, due_date: '2026-10-02' },
+    { amount: null, last_paid_amount: null, due_date: '2026-10-03' },
+    { amount: 0, last_paid_amount: 999, due_date: '2026-11-01' } // a real 0 wins over the last payment
+  ];
+  const s = summarizeBills(bills, [], TODAY);
+  assert.equal(s.monthlyEquivalent, 1200);
+  assert.equal(s.dueSoonAmount, 1200);
+  assert.equal(s.unknownAmountCount, 1);
+  assert.equal(expectedAmount({ amount: 2400, last_paid_amount: 2650 }), 2400);
+});
+
+test('addBill validates the form: name, method, bank details for checks, due date, and an amount if given', () => {
   const d = db.initDb(':memory:');
   assert.throws(() => db.addBill(d, { ...electricity, name: ' ' }), /name/);
   assert.throws(() => db.addBill(d, { ...electricity, frequency: 'weekly' }), /how often/);
   assert.throws(() => db.addBill(d, { ...electricity, paymentMethod: 'cash' }), /how the bill is paid/);
   assert.throws(() => db.addBill(d, { ...electricity, paymentMethod: 'check' }), /bank details/);
   assert.throws(() => db.addBill(d, { ...electricity, dueDate: '' }), /due date/);
-  assert.throws(() => db.addBill(d, { ...electricity, amount: '' }), /amount/);
+  assert.throws(() => db.addBill(d, { ...electricity, amount: -5 }), /usual amount/);
+  assert.throws(() => db.addBill(d, { ...electricity, amount: 'lots' }), /usual amount/);
   const id = db.addBill(d, { ...electricity, paymentMethod: 'check', bankDetail: 'HDFC ••1234' });
   const [bill] = db.listBills(d);
   assert.equal(bill.id, id);
@@ -150,4 +164,53 @@ test('bill reminder log: records each (bill, due date, threshold) once and is cl
   assert.deepEqual([...db.listSentBillReminders(d)], [`${id}|2026-10-05|3`]);
   db.recreateDbSchema(d);
   assert.equal(db.listSentBillReminders(d).size, 0);
+});
+
+test('a bill can leave its amount blank; each payment then records what was actually paid', () => {
+  const d = db.initDb(':memory:');
+  const id = db.addBill(d, { ...electricity, name: 'Phone', amount: '' });
+  assert.equal(db.listBills(d)[0].amount, null);
+  assert.throws(() => db.recordPayment(d, id, { paidOn: '2026-10-04', amount: '' }), /amount paid/, 'the payment still needs one');
+  db.recordPayment(d, id, { paidOn: '2026-10-04', amount: 612 });
+  db.recordPayment(d, id, { paidOn: '2026-11-04', amount: 745.2 });
+  assert.deepEqual(db.listPayments(d, { billId: id }).map((p) => p.amount), [745.2, 612]);
+  assert.equal(db.listBills(d)[0].last_paid_amount, 745.2);
+  db.updateBill(d, id, { ...electricity, name: 'Phone', amount: 700 });
+  assert.equal(db.listBills(d)[0].amount, 700, 'and can be set later');
+});
+
+test('initDb rebuilds a bills table that required an amount, keeping bills, payments and reminder log', () => {
+  const path = require('node:path');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const { DatabaseSync } = require('node:sqlite');
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pl-')), 'bills-v1.sqlite');
+
+  // A database from before this change: set it up with today's schema, then
+  // swap in the old bills table that had amount REAL NOT NULL.
+  const setup = db.initDb(dbPath);
+  setup.exec(`PRAGMA foreign_keys = OFF;
+    DROP TABLE bills;
+    CREATE TABLE bills (id INTEGER PRIMARY KEY, name TEXT NOT NULL, frequency TEXT NOT NULL DEFAULT 'monthly',
+      payment_method TEXT NOT NULL, bank_detail TEXT, due_date TEXT NOT NULL, due_day INTEGER NOT NULL,
+      amount REAL NOT NULL, archived_at TEXT);
+    INSERT INTO bills VALUES (7, 'Rent', 'monthly', 'check', 'SBI', '2026-10-01', 1, 25000, NULL);
+    INSERT INTO bill_payments (bill_id, paid_on, amount, payment_method) VALUES (7, '2026-09-01', 25000, 'check');
+    INSERT INTO bill_reminder_log (bill_id, due_date, days_before) VALUES (7, '2026-10-01', 3);`);
+  setup.close();
+
+  const d = db.initDb(dbPath);
+  const amountCol = d.prepare('PRAGMA table_info(bills)').all().find((c) => c.name === 'amount');
+  assert.equal(amountCol.notnull, 0);
+  const [rent] = db.listBills(d);
+  assert.deepEqual([rent.id, rent.name, rent.amount, rent.last_paid_amount], [7, 'Rent', 25000, 25000]);
+  assert.equal(db.listSentBillReminders(d).size, 1);
+  assert.equal(d.prepare('PRAGMA foreign_key_check').all().length, 0);
+  db.updateBill(d, 7, { name: 'Rent', paymentMethod: 'check', bankDetail: 'SBI', dueDate: '2026-10-01', amount: '' });
+  assert.equal(db.listBills(d)[0].amount, null, 'blank now allowed');
+  d.close();
+
+  const again = db.initDb(dbPath); // second start: nothing left to migrate
+  assert.equal(db.listBills(again).length, 1);
+  again.close();
 });

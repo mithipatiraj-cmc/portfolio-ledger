@@ -166,7 +166,7 @@
           <th>How often</th>
           <th>Paid by</th>
           <th>Next due</th>
-          <th class="num">Amount</th>
+          <th class="num">Usual amount</th>
           <th class="num">Last payment</th>
           <th></th>
         </tr>
@@ -209,8 +209,11 @@
         <label for="billFrequency">How often</label>
         <select id="billFrequency"></select>
 
-        <label for="billAmount">Amount due (₹)</label>
-        <input id="billAmount" type="number" min="0" step="0.01" inputmode="decimal">
+        <label for="billAmount">Usual amount (₹)</label>
+        <div>
+          <input id="billAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Optional">
+          <div class="field-help">Leave blank if it varies. You enter what you actually paid each time you record a payment.</div>
+        </div>
 
         <label for="billDueDate">Next due date</label>
         <div>
@@ -244,7 +247,10 @@
         <input id="payDate" type="date">
 
         <label for="payAmount">Amount paid (₹)</label>
-        <input id="payAmount" type="number" min="0" step="0.01" inputmode="decimal">
+        <div>
+          <input id="payAmount" type="number" min="0" step="0.01" inputmode="decimal">
+          <div class="field-help" id="payAmountHelp"></div>
+        </div>
 
         <label for="payMethod">Paid by</label>
         <select id="payMethod"></select>

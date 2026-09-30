@@ -62,21 +62,34 @@
   }
 
   /**
+   * What a bill is expected to cost: its usual amount, or for a bill whose
+   * amount varies, its last payment. null when neither is known yet.
+   */
+  function expectedAmount(bill) {
+    for (const v of [bill.amount, bill.last_paid_amount]) {
+      if (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))) return Number(v);
+    }
+    return null;
+  }
+
+  /**
    * Tiles for the bills shown: what they cost per month on average (a yearly
    * ₹12,000 bill counts as ₹1,000), what's overdue or due within a week, and
-   * what was paid this calendar month (from payments).
+   * what was paid this calendar month (from payments). Bills without a usual
+   * amount count at their last payment; unknownAmountCount is those with neither.
    */
   function summarizeBills(bills, payments, today = new Date()) {
     const active = bills.filter((b) => !b.archived_at);
     const monthPrefix = toISODate(today).slice(0, 7);
     const status = (b) => dueStatus(b.due_date, today);
-    const amountOf = (list) => list.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+    const amountOf = (list) => list.reduce((sum, b) => sum + (expectedAmount(b) ?? 0), 0);
     const overdue = active.filter((b) => status(b)?.level === 'overdue');
     const dueSoon = active.filter((b) => status(b)?.level === 'soon');
     const paidThisMonth = payments.filter((p) => String(p.paid_on).startsWith(monthPrefix));
     return {
       billCount: active.length,
-      monthlyEquivalent: active.reduce((sum, b) => sum + (Number(b.amount) || 0) / monthsFor(b.frequency), 0),
+      monthlyEquivalent: active.reduce((sum, b) => sum + (expectedAmount(b) ?? 0) / monthsFor(b.frequency), 0),
+      unknownAmountCount: active.filter((b) => expectedAmount(b) === null).length,
       overdueCount: overdue.length,
       overdueAmount: amountOf(overdue),
       dueSoonCount: dueSoon.length,
@@ -93,6 +106,7 @@
     DUE_SOON_DAYS,
     methodLabel,
     frequencyLabel,
+    expectedAmount,
     nextDueDate,
     dueStatus,
     summarizeBills

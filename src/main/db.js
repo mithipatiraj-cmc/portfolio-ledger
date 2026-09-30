@@ -13,6 +13,22 @@ const TAX_TREATMENT_CHECK = oneOf('tax_treatment', TAX_TREATMENTS);
 const PAYMENT_METHOD_CHECK = oneOf('payment_method', PAYMENT_METHODS);
 const FREQUENCY_CHECK = oneOf('frequency', FREQUENCY_VALUES);
 
+// Bills / expenses. due_date is the next one, moved on by frequency when paid;
+// due_day keeps the day of month it falls on, so the 31st goes 28 Feb → 31 Mar.
+// amount is the usual amount, if there is one; each payment records what was
+// actually paid. A function so migrate() can rebuild the table from it.
+const billsTable = (name) => `CREATE TABLE IF NOT EXISTS ${name} (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  frequency TEXT NOT NULL DEFAULT 'monthly' ${FREQUENCY_CHECK},
+  payment_method TEXT NOT NULL ${PAYMENT_METHOD_CHECK},
+  bank_detail TEXT, -- required for check deposits
+  due_date TEXT NOT NULL,
+  due_day INTEGER NOT NULL CHECK (due_day BETWEEN 1 AND 31),
+  amount REAL, -- NULL when it varies from one period to the next
+  archived_at TEXT -- archived bills keep their payment history
+)`;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS institutions (
   id INTEGER PRIMARY KEY,
@@ -54,19 +70,7 @@ CREATE TABLE IF NOT EXISTS policies (
   deleted_at TEXT -- soft delete: set when the user deletes, NULL while active
 );
 
--- Bills / expenses. due_date is the next one, moved on by frequency when paid;
--- due_day keeps the day of month it falls on, so the 31st goes 28 Feb → 31 Mar.
-CREATE TABLE IF NOT EXISTS bills (
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  frequency TEXT NOT NULL DEFAULT 'monthly' ${FREQUENCY_CHECK},
-  payment_method TEXT NOT NULL ${PAYMENT_METHOD_CHECK},
-  bank_detail TEXT, -- required for check deposits
-  due_date TEXT NOT NULL,
-  due_day INTEGER NOT NULL CHECK (due_day BETWEEN 1 AND 31),
-  amount REAL NOT NULL,
-  archived_at TEXT -- archived bills keep their payment history
-);
+${billsTable('bills')};
 
 -- Every payment ever made, one row each, never overwritten. The method and
 -- bank are copied from the bill at the time, so history stays accurate later.
@@ -131,7 +135,31 @@ function migrate(db) {
   if (!policyColumns.includes('tax_treatment')) {
     db.exec(`ALTER TABLE policies ADD COLUMN tax_treatment TEXT ${TAX_TREATMENT_CHECK};`);
   }
+  makeBillAmountOptional(db);
   normalizeLookupNames(db);
+}
+
+/**
+ * The first version of the bills table required an amount. SQLite can't drop
+ * NOT NULL in place, so rebuild the table (same ids, so payments and the
+ * reminder log still point at their bills).
+ */
+function makeBillAmountOptional(db) {
+  const amount = db.prepare('PRAGMA table_info(bills)').all().find((c) => c.name === 'amount');
+  if (!amount?.notnull) return;
+  db.exec('PRAGMA foreign_keys = OFF;');
+  try {
+    inTransaction(db, () => {
+      db.exec(billsTable('bills_rebuild'));
+      db.exec('INSERT INTO bills_rebuild SELECT id, name, frequency, payment_method, bank_detail, due_date, due_day, amount, archived_at FROM bills;');
+      db.exec('DROP TABLE bills;');
+      db.exec('ALTER TABLE bills_rebuild RENAME TO bills;');
+      const broken = db.prepare('PRAGMA foreign_key_check').all();
+      if (broken.length) throw new Error(`Bills migration left ${broken.length} dangling reference(s).`);
+    });
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
 }
 
 const keepAsIs = (v) => v;
@@ -524,14 +552,14 @@ function billColumns(b) {
   const method = b.paymentMethod;
   const bankDetail = String(b.bankDetail ?? '').trim() || null;
   const dueDate = String(b.dueDate ?? '').trim();
-  const amount = Number(b.amount);
+  const amount = b.amount === '' || b.amount == null ? null : Number(b.amount);
   const frequency = b.frequency ?? 'monthly';
   if (!name) throw new Error('Give the bill a name.');
   if (!FREQUENCY_VALUES.includes(frequency)) throw new Error('Choose how often the bill is paid.');
   if (!PAYMENT_METHODS.includes(method)) throw new Error('Choose how the bill is paid.');
   if (method === 'check' && !bankDetail) throw new Error('Enter the bank details for the check deposit.');
   if (!ISO_DATE.test(dueDate)) throw new Error('Enter the due date.');
-  if (b.amount === '' || b.amount == null || !(amount >= 0)) throw new Error('Enter the amount due.');
+  if (amount !== null && !(amount >= 0)) throw new Error('The usual amount must be a number (or left blank if it varies).');
   return {
     name, frequency, payment_method: method, bank_detail: bankDetail,
     due_date: dueDate, due_day: Number(dueDate.slice(8)), amount

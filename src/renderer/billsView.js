@@ -7,6 +7,7 @@
 (function () {
   const { PAYMENT_METHODS, FREQUENCIES, methodLabel, frequencyLabel, nextDueDate, dueStatus, summarizeBills } =
     window.BillsMath;
+  const hasAmount = (v) => v !== null && v !== undefined && v !== '';
   const { toISODate } = window.PortfolioMath;
 
   const $ = (id) => document.getElementById(id);
@@ -70,7 +71,13 @@
     const s = summarizeBills(bills, payments);
     const tiles = [
       { label: 'Bills', value: String(s.billCount) },
-      { label: 'Per month, on average', value: rupeesWhole.format(s.monthlyEquivalent), note: 'yearly and quarterly bills spread out' },
+      {
+        label: 'Per month, on average',
+        value: rupeesWhole.format(s.monthlyEquivalent),
+        note: s.unknownAmountCount
+          ? `${s.unknownAmountCount} bill${s.unknownAmountCount === 1 ? '' : 's'} with no amount yet not counted`
+          : 'varying bills at their last payment'
+      },
       {
         label: 'Overdue',
         value: String(s.overdueCount),
@@ -140,7 +147,10 @@
         );
       }
 
-      tr.append(name, el('td', null, frequencyLabel(bill.frequency)), paidBy, due, el('td', 'num', rupees.format(bill.amount)), last, actions);
+      const usual = hasAmount(bill.amount)
+        ? el('td', 'num', rupees.format(bill.amount))
+        : el('td', 'num tax-unknown', 'Varies');
+      tr.append(name, el('td', null, frequencyLabel(bill.frequency)), paidBy, due, usual, last, actions);
       return tr;
     }));
   }
@@ -260,10 +270,22 @@
   function openPaymentModal(bill) {
     payingBill = bill;
     $('paymentModalTitle').textContent = `Record payment · ${bill.name}`;
-    $('paymentModalSub').textContent = `${rupees.format(bill.amount)} due ${formatDate(bill.due_date)} (${frequencyLabel(bill.frequency).toLowerCase()}). ` +
+    const usual = hasAmount(bill.amount) ? `usually ${rupees.format(bill.amount)}` : 'amount varies';
+    $('paymentModalSub').textContent =
+      `Due ${formatDate(bill.due_date)}, ${usual} (${frequencyLabel(bill.frequency).toLowerCase()}). ` +
       'Saved as a new entry in the payment history.';
     payFields.date.value = toISODate(new Date());
-    payFields.amount.value = bill.amount;
+    // Start from the usual amount, else the last payment; either way it's what was paid this time that's saved.
+    if (hasAmount(bill.amount)) {
+      payFields.amount.value = bill.amount;
+      $('payAmountHelp').textContent = 'The usual amount. Change it if this period’s bill was different.';
+    } else if (hasAmount(bill.last_paid_amount)) {
+      payFields.amount.value = bill.last_paid_amount;
+      $('payAmountHelp').textContent = `Last time you paid ${rupees.format(bill.last_paid_amount)}. Enter this period’s amount.`;
+    } else {
+      payFields.amount.value = '';
+      $('payAmountHelp').textContent = 'Enter the amount paid for this period.';
+    }
     payFields.method.value = bill.payment_method;
     payFields.bank.value = bill.bank_detail ?? '';
     payFields.note.value = '';

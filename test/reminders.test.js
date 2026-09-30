@@ -145,3 +145,10 @@ test('buildReminderEmail: bills alone, and policies and bills together in one di
   assert.ok(both.text.indexOf('approaching maturity') < both.text.indexOf('This bill is due soon'), 'policies first, then bills');
   assert.equal((both.html.match(/<table/g) ?? []).length, 2);
 });
+
+test('buildReminderEmail: a bill whose amount varies shows "Varies" and its last payment', () => {
+  const billsDue = findDueBillReminders([bill(1, '2026-09-25', { amount: null, last_paid_amount: 1480 })], new Set(), [3, 1], TODAY);
+  assert.match(buildReminderEmail([], billsDue).text, /Bill 1 — Varies \(last ₹1,480\) due 2026-09-25/);
+  const neverPaid = findDueBillReminders([bill(2, '2026-09-25', { amount: null })], new Set(), [3, 1], TODAY);
+  assert.match(buildReminderEmail([], neverPaid).text, /Bill 2 — Varies due/);
+});

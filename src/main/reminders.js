@@ -145,12 +145,18 @@ ${rows.map((r) => `<tr>${cols.map(([, k]) => `<td style="${cell}">${escapeHtml(r
 </table>`;
 }
 
+/** The usual amount, or for a bill that varies, "Varies" with the last payment for reference. */
+function billAmountText(b) {
+  if (b.amount !== null && b.amount !== undefined) return inr.format(b.amount);
+  return b.last_paid_amount == null ? 'Varies' : `Varies (last ${inr.format(b.last_paid_amount)})`;
+}
+
 /** Bill rows for the email: what's due, when, and how it's paid. */
 function billSection(billsDue) {
   const rows = billsDue.map(({ bill: b, days }) => ({
     name: b.name,
     when: `${b.due_date} (${whenText(days)})`,
-    amount: inr.format(b.amount),
+    amount: billAmountText(b),
     paidBy: methodLabel(b.payment_method),
     bank: b.bank_detail ?? '—',
     frequency: frequencyLabel(b.frequency)
