@@ -293,7 +293,7 @@ const PHASES = [
     sub: "Track recurring bills and every payment made on them (spec §7)",
     color: "#2a7f8a",
     tasks: [
-      "Add bills and bill_payments tables: name, frequency (monthly, every 2 months, quarterly, every 6 months, yearly), payment method (direct bank payment or check deposit with bank details), next due date, amount",
+      "Add bills and bill_payments tables: name, frequency (monthly, every 2 months, quarterly, every 6 months, yearly), payment method (direct bank payment, check deposit with bank details, or credit card), next due date, amount",
       "Bills tab with add / edit / archive, due-date badges (overdue, due within 7 days) and summary tiles (per-month average, overdue, due soon, paid this month)",
       "Record payment: save every payment as a new history entry and move the due date on by the bill's frequency (optional for one-off payments)",
       "Show each bill's last payment from the history, and a payment history view filterable by bill for looking up past payments",

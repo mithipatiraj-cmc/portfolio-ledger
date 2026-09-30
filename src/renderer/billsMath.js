@@ -9,8 +9,8 @@
     : root.PortfolioMath;
   const { DAY_MS, dayValue, toISODate } = PortfolioMath;
 
-  const PAYMENT_METHODS = ['bank_transfer', 'check'];
-  const METHOD_LABELS = { bank_transfer: 'Direct bank payment', check: 'Check deposit' };
+  const PAYMENT_METHODS = ['bank_transfer', 'check', 'credit_card'];
+  const METHOD_LABELS = { bank_transfer: 'Direct bank payment', check: 'Check deposit', credit_card: 'Credit card' };
 
   // How often a bill falls due, and how many months each step moves the due date.
   // Bi-monthly means every two months (as with bimonthly electricity bills).

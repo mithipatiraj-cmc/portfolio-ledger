@@ -171,7 +171,7 @@ function billSection(billsDue) {
       ''
     ])
   ];
-  const cols = [['Bill', 'name'], ['Due', 'when'], ['Amount', 'amount'], ['Paid by', 'paidBy'], ['Bank details', 'bank'], ['How often', 'frequency']];
+  const cols = [['Bill', 'name'], ['Due', 'when'], ['Amount', 'amount'], ['Paid by', 'paidBy'], ['Bank / card', 'bank'], ['How often', 'frequency']];
   return { text, html: `<p>${intro}</p>\n${htmlTable(cols, rows)}` };
 }
 

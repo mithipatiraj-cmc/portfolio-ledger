@@ -29,6 +29,21 @@ const billsTable = (name) => `CREATE TABLE IF NOT EXISTS ${name} (
   archived_at TEXT -- archived bills keep their payment history
 )`;
 
+// Every payment ever made, one row each, never overwritten. The method and
+// bank/card are copied from the bill at the time, so history stays accurate later.
+const billPaymentsTable = (name) => `CREATE TABLE IF NOT EXISTS ${name} (
+  id INTEGER PRIMARY KEY,
+  bill_id INTEGER NOT NULL REFERENCES bills(id),
+  paid_on TEXT NOT NULL,
+  amount REAL NOT NULL,
+  payment_method TEXT NOT NULL ${PAYMENT_METHOD_CHECK},
+  bank_detail TEXT,
+  for_due_date TEXT, -- the due date this payment settled
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`;
+const BILL_PAYMENTS_INDEX = 'CREATE INDEX IF NOT EXISTS bill_payments_by_bill ON bill_payments (bill_id, paid_on)';
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS institutions (
   id INTEGER PRIMARY KEY,
@@ -72,20 +87,8 @@ CREATE TABLE IF NOT EXISTS policies (
 
 ${billsTable('bills')};
 
--- Every payment ever made, one row each, never overwritten. The method and
--- bank are copied from the bill at the time, so history stays accurate later.
-CREATE TABLE IF NOT EXISTS bill_payments (
-  id INTEGER PRIMARY KEY,
-  bill_id INTEGER NOT NULL REFERENCES bills(id),
-  paid_on TEXT NOT NULL,
-  amount REAL NOT NULL,
-  payment_method TEXT NOT NULL ${PAYMENT_METHOD_CHECK},
-  bank_detail TEXT,
-  for_due_date TEXT, -- the due date this payment settled
-  note TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS bill_payments_by_bill ON bill_payments (bill_id, paid_on);
+${billPaymentsTable('bill_payments')};
+${BILL_PAYMENTS_INDEX};
 
 -- User preferences (e.g. email reminders), one JSON value per key.
 CREATE TABLE IF NOT EXISTS settings (
@@ -135,27 +138,50 @@ function migrate(db) {
   if (!policyColumns.includes('tax_treatment')) {
     db.exec(`ALTER TABLE policies ADD COLUMN tax_treatment TEXT ${TAX_TREATMENT_CHECK};`);
   }
-  makeBillAmountOptional(db);
+  upgradeBillTables(db);
   normalizeLookupNames(db);
 }
 
 /**
- * The first version of the bills table required an amount. SQLite can't drop
- * NOT NULL in place, so rebuild the table (same ids, so payments and the
- * reminder log still point at their bills).
+ * SQLite can't change a column's NOT NULL or CHECK in place, so bill tables
+ * created by an older version (amount required, or fewer payment methods) are
+ * rebuilt from the current definitions. Ids are kept, so payments and the
+ * reminder log still point at their bills.
  */
-function makeBillAmountOptional(db) {
-  const amount = db.prepare('PRAGMA table_info(bills)').all().find((c) => c.name === 'amount');
-  if (!amount?.notnull) return;
+function upgradeBillTables(db) {
+  const storedSql = (table) =>
+    db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)?.sql ?? '';
+  const hasCurrentMethods = (table) => storedSql(table).includes(PAYMENT_METHOD_CHECK);
+  const amountRequired = Boolean(db.prepare('PRAGMA table_info(bills)').all().find((c) => c.name === 'amount')?.notnull);
+
+  const outdated = [
+    {
+      table: 'bills',
+      create: billsTable,
+      columns: 'id, name, frequency, payment_method, bank_detail, due_date, due_day, amount, archived_at',
+      needed: amountRequired || !hasCurrentMethods('bills')
+    },
+    {
+      table: 'bill_payments',
+      create: billPaymentsTable,
+      columns: 'id, bill_id, paid_on, amount, payment_method, bank_detail, for_due_date, note, created_at',
+      needed: !hasCurrentMethods('bill_payments')
+    }
+  ].filter((t) => t.needed);
+  if (outdated.length === 0) return;
+
   db.exec('PRAGMA foreign_keys = OFF;');
   try {
     inTransaction(db, () => {
-      db.exec(billsTable('bills_rebuild'));
-      db.exec('INSERT INTO bills_rebuild SELECT id, name, frequency, payment_method, bank_detail, due_date, due_day, amount, archived_at FROM bills;');
-      db.exec('DROP TABLE bills;');
-      db.exec('ALTER TABLE bills_rebuild RENAME TO bills;');
+      for (const { table, create, columns } of outdated) {
+        db.exec(create(`${table}_rebuild`));
+        db.exec(`INSERT INTO ${table}_rebuild (${columns}) SELECT ${columns} FROM ${table};`);
+        db.exec(`DROP TABLE ${table};`);
+        db.exec(`ALTER TABLE ${table}_rebuild RENAME TO ${table};`);
+      }
+      db.exec(BILL_PAYMENTS_INDEX); // dropped with the old bill_payments table
       const broken = db.prepare('PRAGMA foreign_key_check').all();
-      if (broken.length) throw new Error(`Bills migration left ${broken.length} dangling reference(s).`);
+      if (broken.length) throw new Error(`Bills upgrade left ${broken.length} dangling reference(s).`);
     });
   } finally {
     db.exec('PRAGMA foreign_keys = ON;');

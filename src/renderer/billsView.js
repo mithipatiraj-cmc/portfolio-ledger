@@ -238,9 +238,11 @@
   }
 
   function updateBankHelp() {
-    billBankHelp.textContent = billFields.method.value === 'check'
-      ? 'Required: the bank and account the check is deposited into.'
-      : 'Optional: the account it’s paid from.';
+    billBankHelp.textContent = {
+      check: 'Required: the bank and account the check is deposited into.',
+      credit_card: 'Optional: which card, e.g. HDFC Regalia ••5678.',
+      bank_transfer: 'Optional: the account it’s paid from.'
+    }[billFields.method.value];
   }
   billFields.method.addEventListener('change', updateBankHelp);
 

@@ -214,3 +214,55 @@ test('initDb rebuilds a bills table that required an amount, keeping bills, paym
   assert.equal(db.listBills(again).length, 1);
   again.close();
 });
+
+test('credit card is a payment method; card details are optional', () => {
+  const d = db.initDb(':memory:');
+  assert.equal(methodLabel('credit_card'), 'Credit card');
+  const id = db.addBill(d, { ...electricity, name: 'Netflix', paymentMethod: 'credit_card', amount: 649 });
+  db.recordPayment(d, id, { paidOn: '2026-10-05', amount: 649, bankDetail: 'HDFC Regalia ••5678' });
+  const [bill] = db.listBills(d);
+  assert.deepEqual([bill.payment_method, bill.bank_detail], ['credit_card', null]);
+  assert.deepEqual(db.listPayments(d).map((p) => [p.payment_method, p.bank_detail]), [['credit_card', 'HDFC Regalia ••5678']]);
+});
+
+test('initDb upgrades bill tables that only allowed bank transfer and check, keeping everything', () => {
+  const path = require('node:path');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pl-')), 'bills-2methods.sqlite');
+
+  // Both tables as the previous version created them: CHECK allows only two methods.
+  const setup = db.initDb(dbPath);
+  const oldCheck = "CHECK (payment_method IN ('bank_transfer', 'check'))";
+  setup.exec(`PRAGMA foreign_keys = OFF;
+    DROP TABLE bill_payments; DROP TABLE bills;
+    CREATE TABLE bills (id INTEGER PRIMARY KEY, name TEXT NOT NULL, frequency TEXT NOT NULL DEFAULT 'monthly',
+      payment_method TEXT NOT NULL ${oldCheck}, bank_detail TEXT, due_date TEXT NOT NULL,
+      due_day INTEGER NOT NULL, amount REAL, archived_at TEXT);
+    CREATE TABLE bill_payments (id INTEGER PRIMARY KEY, bill_id INTEGER NOT NULL REFERENCES bills(id),
+      paid_on TEXT NOT NULL, amount REAL NOT NULL, payment_method TEXT NOT NULL ${oldCheck}, bank_detail TEXT,
+      for_due_date TEXT, note TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+    INSERT INTO bills VALUES (3, 'Rent', 'monthly', 'check', 'SBI', '2026-10-01', 1, 25000, NULL);
+    INSERT INTO bill_payments (id, bill_id, paid_on, amount, payment_method, note, created_at)
+      VALUES (11, 3, '2026-09-01', 25000, 'check', 'cheque 000411', '2026-09-01 10:00:00');
+    INSERT INTO bill_reminder_log (bill_id, due_date, days_before) VALUES (3, '2026-10-01', 1);`);
+  assert.throws(() => setup.exec("INSERT INTO bills VALUES (4, 'X', 'monthly', 'credit_card', NULL, '2026-10-01', 1, 1, NULL)"), /CHECK/);
+  setup.close();
+
+  const d = db.initDb(dbPath);
+  const [p] = db.listPayments(d);
+  assert.deepEqual([p.id, p.bill_id, p.note, p.created_at], [11, 3, 'cheque 000411', '2026-09-01 10:00:00']);
+  assert.equal(db.listBills(d)[0].last_paid_amount, 25000);
+  assert.equal(db.listSentBillReminders(d).size, 1);
+  const indexes = d.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'bill_payments'").all().map((r) => r.name);
+  assert.ok(indexes.includes('bill_payments_by_bill'), 'index recreated');
+
+  db.updateBill(d, 3, { name: 'Rent', paymentMethod: 'credit_card', dueDate: '2026-10-01', amount: 25000 });
+  db.recordPayment(d, 3, { paidOn: '2026-10-01', amount: 25000 });
+  assert.equal(db.listPayments(d)[0].payment_method, 'credit_card');
+  d.close();
+
+  const again = db.initDb(dbPath); // already current: no second rebuild, nothing lost
+  assert.equal(db.listPayments(again).length, 2);
+  again.close();
+});

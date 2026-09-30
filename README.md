@@ -67,11 +67,11 @@ insurance, …) and every payment you make on them.
 
 - **Add bill**: a name, how often it's due (monthly, every 2 months,
   quarterly, every 6 months or yearly), the next due date, how it's paid
-  (**direct bank payment** or **check deposit**) and, optionally, the usual
+  (**direct bank payment**, **check deposit** or **credit card**) and, optionally, the usual
   amount. Leave the amount blank for bills that vary from one period to the
-  next (phone, electricity); they show as **Varies**. Bank details are
+  next (phone, electricity); they show as **Varies**. Bank / card details are
   required for a check deposit (the account it's deposited into) and optional
-  for a bank payment.
+  for a bank payment or credit card (e.g. which card).
 - **Record payment** saves a new entry in the payment history with the date,
   the amount actually paid, method, bank details and an optional note (e.g. a
   cheque number). The amount starts from the bill's usual amount, or for a

@@ -274,8 +274,8 @@ A **bill** is anything paid on a schedule:
 | --- | --- | --- |
 | `name` | string | e.g. "Electricity" — required |
 | `frequency` | enum | `monthly`, `bimonthly` (every 2 months), `quarterly`, `semiannual` (every 6 months), `annual` — defaults to monthly |
-| `paymentMethod` | enum | `bank_transfer` (direct bank payment) or `check` (check deposit) |
-| `bankDetail` | string | Bank/account for the payment — **required for a check deposit**, optional for a bank payment |
+| `paymentMethod` | enum | `bank_transfer` (direct bank payment), `check` (check deposit) or `credit_card` |
+| `bankDetail` | string | Bank/account or card for the payment — **required for a check deposit**, optional for a bank payment or credit card (which card) |
 | `dueDate` | date | The **next** due date |
 | `amount` | number, optional | The usual amount. Blank for bills that vary between periods; the amount actually paid is always entered per payment |
 | last payment | derived | Most recent payment's date and amount — read from the history, not stored on the bill, so the two can't disagree |
@@ -296,7 +296,7 @@ CREATE TABLE bills (
   name TEXT NOT NULL,
   frequency TEXT NOT NULL DEFAULT 'monthly'
     CHECK (frequency IN ('monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual')),
-  payment_method TEXT NOT NULL CHECK (payment_method IN ('bank_transfer', 'check')),
+  payment_method TEXT NOT NULL CHECK (payment_method IN ('bank_transfer', 'check', 'credit_card')),
   bank_detail TEXT,
   due_date TEXT NOT NULL,    -- next due date
   due_day INTEGER NOT NULL,  -- day of month it falls due (1–31)
@@ -309,7 +309,7 @@ CREATE TABLE bill_payments (
   bill_id INTEGER NOT NULL REFERENCES bills(id),
   paid_on TEXT NOT NULL,
   amount REAL NOT NULL,
-  payment_method TEXT NOT NULL CHECK (payment_method IN ('bank_transfer', 'check')),
+  payment_method TEXT NOT NULL CHECK (payment_method IN ('bank_transfer', 'check', 'credit_card')),
   bank_detail TEXT,
   for_due_date TEXT,
   note TEXT,
@@ -332,6 +332,10 @@ CREATE TABLE bill_payments (
   period, so a ₹12,000 yearly bill counts as ₹1,000; a bill with no usual
   amount counts at its last payment, and one never paid isn't counted);
   overdue; due within 7 days; and paid this calendar month (from the history).
+- **Upgrading older databases:** SQLite can't change a NOT NULL or CHECK
+  constraint in place, so on startup the bills tables are rebuilt from the
+  current definitions when they're out of date (e.g. created before credit
+  card was a payment method), keeping ids and every payment.
 - **Variable amounts:** a bill's usual amount is optional. Reminder emails show
   "Varies" with the last payment for reference.
 - **Payment history** lists every payment newest first, filterable by bill.
