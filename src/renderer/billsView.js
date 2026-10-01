@@ -51,6 +51,12 @@
     payFields.method.append(option(m, methodLabel(m)));
   }
 
+  // Collapsible panels; each remembers whether it was open (per viewer, so browser storage is fine).
+  const panels = {
+    bills: collapsible($('billsPanel'), 'bills.panel.bills'),
+    history: collapsible($('historyPanel'), 'bills.panel.history')
+  };
+
   window.Tabs.onShow('bills', load);
   window.addEventListener('currencychange', () => {
     if (document.getElementById('billsView').hidden) return;
@@ -130,6 +136,7 @@
 
   // --- Bills table ---
   function renderBills() {
+    $('billsCount').textContent = `· ${bills.length}`;
     if (bills.length === 0) {
       billBody.replaceChildren(emptyRow(6, showArchived.checked ? 'No bills.' : 'No bills yet. Use "+ Add bill" to start tracking one.'));
       return;
@@ -208,12 +215,14 @@
 
   function showHistoryFor(billId) {
     historyBill.value = String(billId);
+    panels.history.setOpen(true);
     renderPayments();
     historyBill.closest('section').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function renderPayments() {
     const shown = historyBill.value ? payments.filter((p) => String(p.bill_id) === historyBill.value) : payments;
+    $('historyCount').textContent = `· ${shown.length}${historyBill.value ? ` of ${payments.length}` : ''}`;
     if (shown.length === 0) {
       paymentBody.replaceChildren(emptyRow(8, 'No payments recorded yet.'));
       return;
@@ -342,6 +351,31 @@
     if (e.key !== 'Escape') return;
     for (const modal of [billModal, paymentModal]) if (!modal.classList.contains('hidden')) closeModal(modal);
   });
+
+  /**
+   * Make a .panel.collapsible open and close from its header button, restoring
+   * the last state from localStorage. Returns { setOpen }.
+   */
+  function collapsible(panel, storageKey) {
+    const toggle = panel.querySelector('.collapse-toggle');
+    const body = document.getElementById(toggle.getAttribute('aria-controls'));
+    function setOpen(open, { remember = true } = {}) {
+      toggle.setAttribute('aria-expanded', String(open));
+      body.hidden = !open;
+      panel.classList.toggle('collapsed', !open);
+      if (!remember) return;
+      try {
+        localStorage.setItem(storageKey, open ? 'open' : 'closed');
+      } catch { /* storage unavailable: just don't remember */ }
+    }
+    let saved = null;
+    try {
+      saved = localStorage.getItem(storageKey);
+    } catch { /* ignore */ }
+    setOpen(saved !== 'closed', { remember: false });
+    toggle.addEventListener('click', () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'));
+    return { setOpen };
+  }
 
   // --- Small helpers ---
   function closeModal(modal) {

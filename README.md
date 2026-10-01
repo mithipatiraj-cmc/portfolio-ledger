@@ -85,6 +85,9 @@ insurance, …) and every payment you make on them.
 - **Payment history** lists every payment, newest first; pick a bill (or use
   its **History** button) to look up just its payments. A payment entered by
   mistake can be deleted.
+- The **Bills** and **Payment history** lists are collapsible panels: click a
+  panel's title to fold it away. Each remembers whether it was open, and a
+  bill's **History** button opens the history panel.
 - **Archive** hides a bill you no longer pay but keeps its history; turn on
   **Show archived** to see or restore it.
 - The tiles show the average paid out of the bank per month (a ₹12,000 yearly

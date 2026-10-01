@@ -162,7 +162,16 @@
 
     <section id="billTiles" class="tiles" aria-label="Bills summary"></section>
 
-    <table id="billTable">
+    <section class="panel collapsible" id="billsPanel">
+      <div class="panel-head">
+        <button type="button" class="collapse-toggle" aria-expanded="true" aria-controls="billsPanelBody">
+          <span class="chevron" aria-hidden="true"></span>
+          <h2>Bills</h2>
+          <span class="panel-count" id="billsCount"></span>
+        </button>
+      </div>
+      <div class="panel-body" id="billsPanelBody">
+    <table id="billTable" class="tax-table">
       <thead>
         <tr>
           <th>Bill</th>
@@ -175,14 +184,21 @@
       </thead>
       <tbody></tbody>
     </table>
+      </div>
+    </section>
 
-    <section class="panel history-panel">
+    <section class="panel collapsible history-panel" id="historyPanel">
       <div class="panel-head">
-        <h2>Payment history</h2>
+        <button type="button" class="collapse-toggle" aria-expanded="true" aria-controls="historyPanelBody">
+          <span class="chevron" aria-hidden="true"></span>
+          <h2>Payment history</h2>
+          <span class="panel-count" id="historyCount"></span>
+        </button>
         <label class="history-filter">Show
           <select id="historyBill"></select>
         </label>
       </div>
+      <div class="panel-body" id="historyPanelBody">
       <table id="paymentTable" class="tax-table">
         <thead>
           <tr>
@@ -198,6 +214,7 @@
         </thead>
         <tbody></tbody>
       </table>
+      </div>
     </section>
   </main>
 

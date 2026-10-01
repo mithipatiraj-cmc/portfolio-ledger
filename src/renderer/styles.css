@@ -606,6 +606,35 @@ button.link-btn:hover { text-decoration: underline; }
 .badge.overdue { background: var(--crit-bg); color: var(--crit-ink); }
 .badge.soon { background: var(--warn-bg); color: var(--warn-ink); }
 .history-panel { margin-top: 16px; }
+
+/* --- Collapsible panels (Bills tab) --- */
+button.collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 2px 4px 2px 0;
+  border-radius: 6px;
+}
+button.collapse-toggle h2 { margin: 0; }
+button.collapse-toggle:hover h2 { color: var(--accent-text); }
+button.collapse-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.collapse-toggle .chevron {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted);
+  transition: transform 0.15s ease;
+}
+.collapse-toggle[aria-expanded="false"] .chevron { transform: rotate(-90deg); }
+.panel-count { color: var(--muted); font-size: 0.85rem; font-weight: 400; }
+.panel.collapsible.collapsed .panel-head { margin-bottom: 0; }
+.panel.collapsible.collapsed .history-filter { display: none; }
+.panel-body[hidden] { display: none; }
 .history-filter { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-2); }
 .advance-row { margin: 14px 0 0; font-weight: 400; }
 tr.archived td { color: var(--muted); }
