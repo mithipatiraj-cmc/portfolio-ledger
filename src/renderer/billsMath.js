@@ -79,28 +79,48 @@
   }
 
   /**
+   * Each active bill's most recent payment dated today or earlier (scheduled,
+   * future-dated payments don't count yet), as [{ bill, payment }].
+   */
+  function lastCyclePayments(bills, payments, today = new Date()) {
+    const todayIso = toISODate(today);
+    const latest = new Map(); // bill id → payment
+    for (const p of payments) {
+      if (String(p.paid_on) > todayIso) continue;
+      const seen = latest.get(p.bill_id);
+      if (!seen || p.paid_on > seen.paid_on || (p.paid_on === seen.paid_on && p.id > seen.id)) latest.set(p.bill_id, p);
+    }
+    return bills
+      .filter((b) => !b.archived_at && latest.has(b.id))
+      .map((bill) => ({ bill, payment: latest.get(bill.id) }));
+  }
+
+  /**
    * Tiles for the bills shown: what they cost per month on average (a yearly
    * ₹12,000 bill counts as ₹1,000), what's overdue or due within a week, and
-   * what was paid this calendar month (from payments). Bills without a usual
-   * amount count at their last payment; unknownAmountCount is those with neither.
+   * what was paid last cycle. Bills without a usual amount count at their last
+   * payment; unknownAmountCount is those with neither.
+   *
+   * Paid last cycle is each bill's most recent payment, made per month by its
+   * frequency (a ₹6,000 quarterly payment counts as ₹2,000), summed across bills.
    *
    * Both money figures count only what leaves the bank (direct payment or
    * check), so a card's charges aren't counted twice once the card's own bill
    * is paid: the monthly average by each bill's usual method (a forecast), and
-   * paid this month by the method recorded on each payment (what happened).
-   * Card amounts are reported separately (cardMonthlyEquivalent, paidByCardThisMonth).
+   * last cycle by the method recorded on each payment (what happened). Card
+   * amounts are reported separately (cardMonthlyEquivalent, lastCycleCardMonthly).
    */
   function summarizeBills(bills, payments, today = new Date()) {
     const active = bills.filter((b) => !b.archived_at);
-    const monthPrefix = toISODate(today).slice(0, 7);
     const status = (b) => dueStatus(b.due_date, today);
     const amountOf = (list) => list.reduce((sum, b) => sum + (expectedAmount(b) ?? 0), 0);
     const overdue = active.filter((b) => status(b)?.level === 'overdue');
     const dueSoon = active.filter((b) => status(b)?.level === 'soon');
-    const thisMonth = payments.filter((p) => String(p.paid_on).startsWith(monthPrefix));
-    const paidFromBank = thisMonth.filter(isPaidFromBank);
-    const paidByCard = thisMonth.filter((p) => !isPaidFromBank(p));
-    const total = (list) => list.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const lastCycle = lastCyclePayments(active, payments, today);
+    const lastFromBank = lastCycle.filter(({ payment }) => isPaidFromBank(payment));
+    const lastByCard = lastCycle.filter(({ payment }) => !isPaidFromBank(payment));
+    const monthlyPaid = (list) =>
+      list.reduce((sum, { bill, payment }) => sum + (Number(payment.amount) || 0) / monthsFor(bill.frequency), 0);
     const perMonth = (list) => list.reduce((sum, b) => sum + (expectedAmount(b) ?? 0) / monthsFor(b.frequency), 0);
     const fromBank = active.filter(isPaidFromBank);
     const onCard = active.filter((b) => !isPaidFromBank(b));
@@ -114,10 +134,11 @@
       overdueAmount: amountOf(overdue),
       dueSoonCount: dueSoon.length,
       dueSoonAmount: amountOf(dueSoon),
-      paidThisMonth: total(paidFromBank),
-      paymentsThisMonth: paidFromBank.length,
-      paidByCardThisMonth: total(paidByCard),
-      cardPaymentsThisMonth: paidByCard.length
+      lastCycleMonthly: monthlyPaid(lastFromBank),
+      lastCycleBillCount: lastFromBank.length,
+      lastCycleCardMonthly: monthlyPaid(lastByCard),
+      lastCycleCardBillCount: lastByCard.length,
+      notPaidYetCount: active.length - lastCycle.length
     };
   }
 
@@ -133,6 +154,7 @@
     isPaidFromBank,
     nextDueDate,
     dueStatus,
+    lastCyclePayments,
     summarizeBills
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

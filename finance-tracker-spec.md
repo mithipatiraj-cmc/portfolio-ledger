@@ -347,11 +347,8 @@ CREATE TABLE bill_payments (
   `credit_card` bill is charged to the card, and the card's own bill (paid from
   the bank) is what leaves the account, so counting both would double-count.
   Card bills' monthly total is shown separately in the tile's note.
-- **Paid from bank this month:** the same rule applied to the payment history:
-  payments this calendar month whose recorded method is `bank_transfer` or
-  `check`. It goes by each payment's own method rather than the bill's, since a
-  single period can be paid differently; card payments are totalled separately
-  in the note.
+- **Paid last cycle, per month:** what the bills actually cost per month,
+  based on each bill's latest payment. See the functional requirements below.
 - **Overdue** and **due within 7 days** cover all bills, cards included, since
   they're about what needs paying rather than what leaves the bank.
 - **Upgrading older databases:** SQLite can't change a NOT NULL or CHECK
@@ -361,6 +358,26 @@ CREATE TABLE bill_payments (
 - **Variable amounts:** a bill's usual amount is optional. Reminder emails show
   "Varies" with the last payment for reference.
 - **Payment history** lists every payment newest first, filterable by bill.
+
+#### Functional requirements: Paid last cycle, per month
+
+**Purpose:** show how much the bills actually cost per month based on what was
+last paid for each one, as opposed to the forecast from their usual amounts.
+
+| ID | Requirement |
+| --- | --- |
+| FR-LC-1 | The Bills tab shows a summary tile titled **Paid last cycle, per month**. |
+| FR-LC-2 | Only active bills count. Archived bills, and their payments, are excluded. |
+| FR-LC-3 | Each bill's **last-cycle payment** is its payment with the latest *paid on* date that is on or before today. If several payments share that date, the one entered last is used. |
+| FR-LC-4 | Payments dated after today (scheduled payments) are ignored until their date arrives. |
+| FR-LC-5 | A bill with no payment on or before today contributes nothing to the value and is counted as **unpaid**. |
+| FR-LC-6 | Each last-cycle payment is pro-rated to a monthly amount by dividing it by the number of months in its bill's frequency: monthly 1, every 2 months 2, quarterly 3, every 6 months 6, yearly 12. |
+| FR-LC-7 | The tile's value is the sum of the pro-rated amounts of last-cycle payments made **from the bank**, i.e. recorded as a direct bank payment or a check deposit. |
+| FR-LC-8 | Whether a payment counts is decided by the method recorded on that payment, not the bill's usual method, since a single period can be paid differently. |
+| FR-LC-9 | Last-cycle payments made by credit card are excluded from the value: a card's charges reach the bank account through the card's own bill, which is itself recorded as a bank payment, so counting both would double-count. |
+| FR-LC-10 | The tile's note shows the number of bills counted from the bank; the pro-rated monthly total of excluded credit card payments, when there are any; and the number of unpaid bills, when there are any. |
+| FR-LC-11 | Amounts are shown in the display currency (§1b), in whole units. |
+| FR-LC-12 | The tile updates whenever a payment is recorded or deleted, a bill is added, edited, archived or restored, or the display currency changes. |
 
 ### 7c. Email reminders
 

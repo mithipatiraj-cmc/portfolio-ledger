@@ -100,9 +100,9 @@
         note: s.dueSoonCount ? moneyWhole(s.dueSoonAmount) : ''
       },
       {
-        label: 'Paid from bank this month',
-        value: moneyWhole(s.paidThisMonth),
-        note: paidNote(s)
+        label: 'Paid last cycle, per month',
+        value: moneyWhole(s.lastCycleMonthly),
+        note: lastCycleNote(s)
       }
     ];
     tilesEl.replaceChildren(...tiles.map((t) => {
@@ -127,11 +127,12 @@
     return parts.length ? parts.join(' · ') : 'direct payments and checks';
   }
 
-  function paidNote(s) {
-    const count = `${s.paymentsThisMonth} payment${s.paymentsThisMonth === 1 ? '' : 's'}`;
-    return s.cardPaymentsThisMonth
-      ? `${count} · ${moneyWhole(s.paidByCardThisMonth)} on credit cards not included`
-      : count;
+  /** Each bill's last payment from the bank, per month; card payments and unpaid bills are noted, not counted. */
+  function lastCycleNote(s) {
+    const parts = [`${s.lastCycleBillCount} from bank`];
+    if (s.lastCycleCardBillCount) parts.push(`${moneyWhole(s.lastCycleCardMonthly)}/mo on cards excluded`);
+    if (s.notPaidYetCount) parts.push(`${s.notPaidYetCount} unpaid`);
+    return parts.join(' · ');
   }
 
   // --- Bills table ---
