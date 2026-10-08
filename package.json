@@ -5,10 +5,11 @@
   "author": "Raviraj",
   "main": "src/main/main.js",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "start": "electron .",
+    "serve": "node src/server/server.js",
     "test": "node --test",
     "dist:linux": "electron-builder --linux AppImage",
     "dist:mac": "electron-builder --mac dmg",

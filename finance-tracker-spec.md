@@ -256,6 +256,37 @@ flowchart TB
 - The **database file** sits in the OS's standard per-app data folder (see §1a for exact paths per OS) — a real file you can back up by copying it directly, in addition to any in-app export.
 - The **LLM API** is the only component that leaves the machine, and only on explicit request (dashed border = opt-in, not part of the core loop).
 
+### 5a. Two front ends, one core
+
+The app can run as the Electron desktop app or in any web browser, from the
+same repository and code. Both sit on `src/main/appCore.js`, which opens the
+database and holds every request handler (named by channel, e.g.
+`policies:list`), backup/restore and the reminder service:
+
+| | Desktop (Electron) | Browser |
+| --- | --- | --- |
+| Start | `npm start` / packaged installer | `npm run serve` (Node 22.13+) |
+| Page → core | `preload.js` → IPC → `main.js` | `src/server/webApi.js` → HTTP → `src/server/server.js` |
+| Excel import, backup, restore | Native open/save dialogs | File upload; backup as a download |
+| Gmail app password | Electron `safeStorage` | AES-256-GCM, key in macOS Keychain / Windows DPAPI / Linux Secret Service |
+| Daily reminder job runs | The app with `--check-reminders` | `server.js --check-reminders`, handing off to a running server |
+
+The page (`src/renderer`) is identical in both; it only ever calls `window.api`.
+
+**Browser mode is local only, with no login (for now):** the server binds
+`127.0.0.1`, so no other device can reach it. Because any website open in the
+same browser could otherwise send requests to `localhost`, the server accepts
+only requests with its own `Host` header (blocking DNS rebinding), an
+`X-Portfolio-Ledger` header (which a cross-site page can't add without a CORS
+preflight the server never approves) and, when present, its own `Origin`.
+Uploaded files are kept server-side under random tokens, so the page never
+passes a file path. Both front ends use the same data folder, so they must not
+run at the same time.
+
+**Later:** with several users, a hosted server (reachable from other devices)
+would add a login and HTTPS on top of the same core; see the deployment options
+discussed for that phase.
+
 ---
 
 ## 6. Packaging & Distribution
@@ -265,6 +296,7 @@ Once the app works in development (`electron .` / `npm run dev`), it needs to be
 - **Tool:** Electron Forge or `electron-builder` — either produces a native installer per OS (`.exe`/NSIS for Windows, `.dmg` for macOS, `.AppImage`/`.deb` for Linux)
 - **First run:** the app creates its `userData` folder and initializes an empty database (with the schema from §1a) if none exists yet — no separate "setup" step needed
 - **Updates:** for a personal single-user app, manual reinstall-on-update is simplest; auto-update infrastructure is worth skipping unless this ever needs to run on more than your own machine
+- **Browser version:** no installer. Any computer with Node.js 22.13+ runs `npm install` then `npm run serve` from the repository (see §5a)
 
 ---
 

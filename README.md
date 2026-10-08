@@ -14,9 +14,10 @@ implements Phase 1 (core data + CRUD + Excel import).
 
 ## Requirements
 
-- Node.js 22 or later, for running `npm test` and `npm start` in development
-- No Node install is needed to *run* the packaged app — Electron ships its
-  own Node runtime (v24 as of Electron 44, confirmed to include `node:sqlite`)
+- Node.js 22.13 or later, for `npm test`, `npm start` in development, and
+  the browser version (`npm run serve`)
+- No Node install is needed to *run* the packaged desktop app — Electron ships
+  its own Node runtime (v24 as of Electron 44, confirmed to include `node:sqlite`)
 
 ## Setup
 
@@ -36,6 +37,44 @@ at your OS's standard per-app data folder:
 - **Windows:** `%APPDATA%\portfolio-ledger\portfolio-ledger.sqlite`
 - **macOS:** `~/Library/Application Support/portfolio-ledger/portfolio-ledger.sqlite`
 - **Linux:** `~/.config/portfolio-ledger/portfolio-ledger.sqlite`
+
+## Run in a browser instead (any OS)
+
+The same app also runs in Chrome, Edge, Firefox or Safari, on Windows, macOS or
+Linux, with no Electron window:
+
+```bash
+npm run serve
+```
+
+This starts a small local server and opens `http://localhost:5757/` in your
+default browser. Everything works as in the desktop app, using **the same
+database file** (the folders above). The differences are where the desktop app
+uses system dialogs:
+
+- **Import from Excel** uploads the file you choose.
+- **Back up** downloads the backup to your browser's downloads folder.
+- **Restore…** uploads the backup you choose, then asks you to confirm.
+
+Options: `npm run serve -- --port 6000` for another port, `-- --no-open` to not
+open the browser. Stop it with Ctrl+C in the terminal. Set
+`PORTFOLIO_LEDGER_DATA_DIR` to use a different data folder.
+
+**Only this computer can open it**, and there's no login. The server listens
+on `127.0.0.1` only, so other devices on your network can't reach it, and it
+refuses requests that don't come from its own page, so another website open in
+your browser can't read or change your data.
+
+**Don't run the desktop app and the browser version at the same time.** They
+share the database, and a restore in one would replace the file under the
+other. Use one or the other.
+
+**Email reminders** work the same way. The Gmail app password is stored
+separately from the desktop app's (enter it once under Reminders), encrypted
+with a key kept in macOS Keychain, Windows DPAPI or Linux Secret Service
+(`secret-tool`, from libsecret). Saving reminders registers the daily
+background check to run the browser version's check, which hands it to the
+running server if it's open.
 
 ## Import your existing Excel sheet
 
@@ -256,7 +295,11 @@ app.
 
 ```
 src/
-  main/         Electron main process: window creation, IPC handlers, SQLite (db.js)
+  main/         appCore.js (database, every request handler, backup/restore, reminders),
+                shared by both front ends; main.js + preload.js are the Electron
+                front end; db.js is the SQLite data layer
+  server/       The browser front end: server.js (local HTTP server on 127.0.0.1),
+                webApi.js (window.api over HTTP), secretStore.js, paths.js
   import/       Excel parsing (excelImport.js) and import-commit logic (importRunner.js)
                 — both plain Node modules, independent of Electron, fully unit tested
   renderer/     UI: index.html, styles.css, tabs.js (section tabs), money.js (currency
