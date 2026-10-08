@@ -6,7 +6,6 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { safeStorage } = require('electron');
 const db = require('./db.js');
 const { sendMail } = require('./mailer.js');
 const {
@@ -20,7 +19,6 @@ const {
 const scheduler = require('./scheduler.js');
 
 const PREFS_KEY = 'reminders';
-const PASSWORD_KEY = 'reminders.appPassword'; // encrypted with the OS keychain / DPAPI
 const LAST_CHECK_KEY = 'reminders.lastCheck';
 const SCHEDULE_KEY = 'reminders.schedule';
 
@@ -29,8 +27,12 @@ const SCHEDULE_KEY = 'reminders.schedule';
  * @param {() => import('node:sqlite').DatabaseSync} deps.getDatabase - current connection (it changes on restore)
  * @param {string} deps.userDataPath - where reminders.log goes
  * @param {() => {command: string, args: string[]}} deps.launchCommand - how the OS job starts this app headless
+ * @param {object} deps.secretStore - how the Gmail app password is protected at rest:
+ *   { settingsKey, isAvailable(), encrypt(plain) → string, decrypt(stored) → plain }.
+ *   Electron uses safeStorage; the browser server uses a key in the OS keychain.
  */
-function createReminderService({ getDatabase, userDataPath, launchCommand }) {
+function createReminderService({ getDatabase, userDataPath, launchCommand, secretStore }) {
+  const PASSWORD_KEY = secretStore.settingsKey;
   const logPath = path.join(userDataPath, 'reminders.log');
   let checkInProgress = null;
 
@@ -48,14 +50,14 @@ function createReminderService({ getDatabase, userDataPath, launchCommand }) {
   function readPassword() {
     const stored = db.getSetting(getDatabase(), PASSWORD_KEY);
     if (!stored) return null;
-    return safeStorage.decryptString(Buffer.from(stored, 'base64'));
+    return secretStore.decrypt(stored);
   }
 
   function savePassword(plain) {
-    if (!safeStorage.isEncryptionAvailable()) {
+    if (!secretStore.isAvailable()) {
       throw new Error('Secure password storage is not available on this system, so the app password cannot be saved.');
     }
-    db.setSetting(getDatabase(), PASSWORD_KEY, safeStorage.encryptString(plain).toString('base64'));
+    db.setSetting(getDatabase(), PASSWORD_KEY, secretStore.encrypt(plain));
   }
 
   /** Everything the settings screen shows. Never includes the password itself. */

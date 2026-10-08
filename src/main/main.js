@@ -1,63 +1,30 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+// The Electron front end: a window, native file dialogs, and IPC wiring on top
+// of appCore.js, which holds the database and every request handler. The
+// browser server (src/server/server.js) is the other front end on the same core.
+
+const { app, BrowserWindow, ipcMain, dialog, safeStorage } = require('electron');
 const path = require('node:path');
-const fs = require('node:fs');
-const db = require('./db.js');
-const Money = require('../renderer/money.js');
-const { commitImport } = require('../import/importRunner.js');
-const { getImportPreview } = require('../import/excelImport.js');
-const { createReminderService } = require('./reminderService.js');
+const { createAppCore } = require('./appCore.js');
 const { CHECK_FLAG } = require('./scheduler.js');
 
 // Load .env from the project root regardless of the directory the app was launched from.
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
-let database;
-let reminders;
+let core;
 
 // Started by the daily OS job (see scheduler.js): check and email reminders, no window.
 const isReminderCheck = process.argv.includes(CHECK_FLAG);
 const HOUR_MS = 60 * 60 * 1000;
 
-function getDbPath() {
-  return path.join(app.getPath('userData'), 'portfolio-ledger.sqlite');
-}
-
-/** portfolio-ledger.sqlite → portfolio-ledger.<label>-<timestamp>.sqlite, next to it. */
-function timestampedCopyPath(dbPath, label) {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return dbPath.replace(/\.sqlite$/, `.${label}-${stamp}.sqlite`);
-}
-
-/**
- * When DB_RESET=true (in .env), drop and recreate every table on startup.
- * The existing database file is copied to a timestamped backup first, so a
- * forgotten flag can't silently destroy data.
- */
-function resetDbIfRequested(dbPath) {
-  if (process.env.DB_RESET !== 'true') return;
-  if (fs.existsSync(dbPath)) {
-    const backupPath = timestampedCopyPath(dbPath, 'backup');
-    fs.copyFileSync(dbPath, backupPath);
-    console.log(`DB_RESET: backed up existing database to ${backupPath}`);
-  }
-  db.recreateDbSchema(database);
-  console.log('DB_RESET: database schema recreated (all data cleared).');
-}
-
-const TAX_SETTINGS_KEY = 'tax';
-const CURRENCY_KEY = 'currency';
-
-/** Keep only non-negative numbers: { rebateLimit, holders: { [name]: { rate, otherIncome } } }. */
-function normalizeTaxSettings(input) {
-  const amount = (v) => (v === null || v === '' || !(Number(v) >= 0) ? null : Number(v));
-  const holders = {};
-  for (const [name, h] of Object.entries(input?.holders ?? {})) {
-    holders[name] = { rate: amount(h?.rate), otherIncome: amount(h?.otherIncome) };
-  }
-  return { rebateLimit: amount(input?.rebateLimit), holders };
-}
+/** The Gmail app password, encrypted with the OS keychain (macOS) or DPAPI (Windows) via Electron. */
+const electronSecretStore = {
+  settingsKey: 'reminders.appPassword',
+  isAvailable: () => safeStorage.isEncryptionAvailable(),
+  encrypt: (plain) => safeStorage.encryptString(plain).toString('base64'),
+  decrypt: (stored) => safeStorage.decryptString(Buffer.from(stored, 'base64'))
+};
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -86,7 +53,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', (_event, argv) => {
     if (argv.includes(CHECK_FLAG)) {
-      reminders?.runCheck('scheduled (app open)');
+      core?.reminders.runCheck('scheduled (app open)');
       return;
     }
     const [win] = BrowserWindow.getAllWindows();
@@ -100,94 +67,44 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function start() {
-  database = db.initDb(getDbPath());
-  reminders = createReminderService({
-    getDatabase: () => database,
+  core = createAppCore({
     userDataPath: app.getPath('userData'),
-    launchCommand: reminderLaunchCommand
+    launchCommand: reminderLaunchCommand,
+    secretStore: electronSecretStore
   });
 
   if (isReminderCheck) {
     try {
-      await reminders.runCheck('scheduled');
+      await core.reminders.runCheck('scheduled');
     } finally {
       app.quit();
     }
     return; // headless: no reset, no window, no IPC
   }
 
-  resetDbIfRequested(getDbPath());
+  core.resetIfRequested();
 
-  // --- IPC handlers: the renderer never touches SQLite directly ---
-  ipcMain.handle('policies:list', (_event, opts) => db.listPolicies(database, opts));
-  ipcMain.handle('policies:add', (_event, policy) => db.addPolicy(database, policy));
-  ipcMain.handle('policies:update', (_event, { id, fields }) => db.updatePolicy(database, id, fields));
-  ipcMain.handle('policies:delete', (_event, id) => db.deletePolicy(database, id));
-  ipcMain.handle('policies:deleteMany', (_event, ids) => db.deletePolicies(database, ids));
-  ipcMain.handle('policies:setIncomeTreatment', (_event, { ids, treatment }) =>
-    db.setIncomeTreatment(database, ids, treatment));
-  ipcMain.handle('policies:setTaxTreatment', (_event, { ids, treatment }) =>
-    db.setTaxTreatment(database, ids, treatment));
-
-  // --- Bills and their payment history ---
-  ipcMain.handle('bills:list', (_event, opts) => db.listBills(database, opts));
-  ipcMain.handle('bills:add', (_event, bill) => db.addBill(database, bill));
-  ipcMain.handle('bills:update', (_event, { id, bill }) => db.updateBill(database, id, bill));
-  ipcMain.handle('bills:archive', (_event, id) => db.archiveBill(database, id));
-  ipcMain.handle('bills:restore', (_event, id) => db.restoreBill(database, id));
-  ipcMain.handle('bills:recordPayment', (_event, { billId, payment, options }) =>
-    db.recordPayment(database, billId, payment, options));
-  ipcMain.handle('bills:payments', (_event, opts) => db.listPayments(database, opts));
-  ipcMain.handle('bills:deletePayment', (_event, id) => db.deletePayment(database, id));
-
-  // --- Display currency (no conversion; reminder emails use it too) ---
-  ipcMain.handle('settings:getCurrency', () => {
-    const code = db.getSetting(database, CURRENCY_KEY);
-    return Money.isSupported(code) ? code : Money.DEFAULT_CURRENCY;
-  });
-  ipcMain.handle('settings:setCurrency', (_event, code) => {
-    if (!Money.isSupported(code)) throw new Error(`Unsupported currency: ${code}`);
-    db.setSetting(database, CURRENCY_KEY, code);
-    return code;
-  });
-
-  // --- Tax projection inputs: the rebate limit plus each holder's rate and other income ---
-  ipcMain.handle('tax:getSettings', () => db.getSetting(database, TAX_SETTINGS_KEY, {}));
-  ipcMain.handle('tax:saveSettings', (_event, settings) => {
-    db.setSetting(database, TAX_SETTINGS_KEY, normalizeTaxSettings(settings));
-    return db.getSetting(database, TAX_SETTINGS_KEY);
-  });
-  ipcMain.handle('policies:restore', (_event, id) => db.restorePolicy(database, id));
-  ipcMain.handle('portfolio:summary', (_event, opts) => db.getPortfolioSummary(database, opts));
+  // --- IPC: the renderer never touches SQLite directly ---
+  for (const [channel, handler] of Object.entries(core.handlers)) {
+    ipcMain.handle(channel, (_event, payload) => handler(payload));
+  }
 
   // --- Excel import, two-step so the renderer can show a mapping UI before committing ---
   // Step 1: user picks a file; we return its header row + auto-detected mapping.
-  // The renderer builds a mapping screen from this and lets the user adjust it.
   ipcMain.handle('import:pickAndPreview', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [{ name: 'Excel', extensions: ['xlsx', 'xls'] }]
     });
     if (canceled || filePaths.length === 0) return null;
-    const filePath = filePaths[0];
-    const buffer = fs.readFileSync(filePath);
-    const preview = getImportPreview(buffer);
-    return { filePath, ...preview };
+    return core.previewImportFile(filePaths[0]);
   });
-
   // Step 1b: user picks a different sheet in a multi-sheet workbook; re-preview that sheet.
-  ipcMain.handle('import:previewSheet', (_event, { filePath, sheetName }) => {
-    const buffer = fs.readFileSync(filePath);
-    return { filePath, ...getImportPreview(buffer, { sheetName }) };
-  });
-
+  ipcMain.handle('import:previewSheet', (_event, { filePath, sheetName }) => core.previewImportFile(filePath, sheetName));
   // Step 2: user confirms (or adjusts) the mapping; we re-read the same file and commit.
-  ipcMain.handle('import:commitWithMapping', (_event, { filePath, sheetName, columnMapping, incomeTreatment }) => {
-    const buffer = fs.readFileSync(filePath);
-    return commitImport(database, db, buffer, { sheetName, columnMapping, incomeTreatment });
-  });
+  ipcMain.handle('import:commitWithMapping', (_event, { filePath, ...options }) => core.commitImportFile(filePath, options));
 
-  // --- Backup & restore ---
+  // --- Backup & restore, through native save/open dialogs ---
   ipcMain.handle('db:backup', async (event) => {
     const today = new Date().toISOString().slice(0, 10);
     const { canceled, filePath } = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
@@ -196,7 +113,7 @@ async function start() {
       filters: [{ name: 'Portfolio Ledger backup', extensions: ['sqlite'] }]
     });
     if (canceled || !filePath) return null;
-    db.backupTo(database, filePath);
+    core.backupTo(filePath);
     return { ok: true, filePath };
   });
 
@@ -210,10 +127,9 @@ async function start() {
     if (canceled || filePaths.length === 0) return null;
     const sourcePath = filePaths[0];
 
-    const backup = db.inspectBackup(sourcePath);
+    const backup = core.inspectRestore(sourcePath);
     if (!backup.ok) return { ok: false, error: backup.error };
 
-    const currentCount = db.listPolicies(database, { includeDeleted: true }).length;
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning',
       buttons: ['Restore', 'Cancel'],
@@ -221,38 +137,18 @@ async function start() {
       cancelId: 1,
       message: 'Replace all current data with this backup?',
       detail:
-        `Current data: ${currentCount} policies.\nBackup: ${backup.policyCount} policies.\n\n` +
+        `Current data: ${backup.currentCount} policies.\nBackup: ${backup.policyCount} policies.\n\n` +
         'A safety copy of the current data is saved first, next to the database file.'
     });
     if (response !== 0) return null;
-
-    // Safety copy first, then swap the file in and reopen (initDb runs any migrations).
-    const dbPath = getDbPath();
-    const safetyPath = timestampedCopyPath(dbPath, 'before-restore');
-    db.backupTo(database, safetyPath);
-    database.close();
-    try {
-      fs.copyFileSync(sourcePath, dbPath);
-      database = db.initDb(dbPath);
-    } catch (err) {
-      fs.copyFileSync(safetyPath, dbPath);
-      database = db.initDb(dbPath);
-      return { ok: false, error: `Restore failed, your previous data is unchanged: ${err.message}` };
-    }
-    return { ok: true, policyCount: backup.policyCount, safetyPath };
+    return core.restoreFrom(sourcePath);
   });
-
-  // --- Email reminders (optional, off until enabled in the Reminders dialog) ---
-  ipcMain.handle('reminders:get', () => reminders.getSettingsView());
-  ipcMain.handle('reminders:save', (_event, input) => reminders.saveSettings(input));
-  ipcMain.handle('reminders:test', (_event, input) => reminders.sendTest(input));
-  ipcMain.handle('reminders:checkNow', () => reminders.runCheck('manual'));
 
   createWindow();
 
   // Catch anything that came due while the app was closed, then keep checking hourly.
-  reminders.runCheck('startup');
-  setInterval(() => reminders.runCheck('hourly'), HOUR_MS);
+  core.reminders.runCheck('startup');
+  setInterval(() => core.reminders.runCheck('hourly'), HOUR_MS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -266,5 +162,5 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-  if (database) database.close();
+  if (core) core.close();
 });
