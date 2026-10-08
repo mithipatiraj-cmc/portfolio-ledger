@@ -625,6 +625,24 @@ themeSelect.addEventListener('change', () => {
   } catch {}
 });
 
+// --- Quit (browser version only: there's no window to close, so this stops the background app) ---
+const quitBtn = document.getElementById('quitBtn');
+if (window.api.quitApp) {
+  quitBtn.hidden = false;
+  quitBtn.addEventListener('click', async () => {
+    if (!confirm('Quit Portfolio Ledger?\n\nIt stops running on this computer until you open it again.')) return;
+    try {
+      await window.api.quitApp();
+    } catch { /* already stopped */ }
+    const note = el('main', 'stopped');
+    note.append(
+      el('h2', null, 'Portfolio Ledger has stopped.'),
+      el('p', null, 'You can close this tab. Open Portfolio Ledger again to start it.')
+    );
+    document.body.replaceChildren(note);
+  });
+}
+
 // --- Currency: a display preference saved in the database (reminder emails use it too) ---
 for (const c of Money.CURRENCIES) {
   const symbol = Money.createMoney(c.code).symbol;

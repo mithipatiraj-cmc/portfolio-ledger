@@ -25,7 +25,7 @@ const freePort = () => new Promise((resolve) => {
 });
 
 /** A server on a free port with its own temporary data folder. */
-async function startServer(t) {
+async function startServer(t, options = {}) {
   const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'pl-server-'));
   const core = createAppCore({
     userDataPath,
@@ -33,7 +33,7 @@ async function startServer(t) {
     secretStore: createSecretStore({ userDataPath, keyStorage: memoryKeyStorage() })
   });
   const port = await freePort();
-  const server = createLedgerServer({ core, port });
+  const server = createLedgerServer({ core, port, ...options });
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(() => { core.close(); resolve(); })));
   const base = `http://127.0.0.1:${port}`;
@@ -161,7 +161,8 @@ test('data folder matches the desktop app in development on each OS', () => {
   assert.equal(defaultDataDir({ platform: 'win32', env: { APPDATA: 'C:\\Users\\a\\AppData\\Roaming' }, home: 'C:\\Users\\a' }),
     path.join('C:\\Users\\a\\AppData\\Roaming', 'portfolio-ledger'));
   assert.equal(defaultDataDir({ platform: 'darwin', env: { PORTFOLIO_LEDGER_DATA_DIR: '/tmp/x' } }), '/tmp/x');
-  assert.deepEqual(parseArgs(['--port', '6000', '--no-open']), { port: 6000, open: false, checkReminders: false });
+  assert.deepEqual(parseArgs(['--port', '6000', '--no-open']), { port: 6000, open: false, checkReminders: false, foreground: false });
+  assert.equal(parseArgs(['--foreground']).foreground, true);
   assert.throws(() => parseArgs(['--port', 'abc']), /Invalid port/);
 });
 
@@ -170,4 +171,29 @@ test('calls with no payload use the handlers\' defaults, as over IPC', async (t)
   assert.equal((await call('policies:list')).status, 200);
   assert.equal((await call('bills:list', null)).status, 200);
   assert.equal((await call('bills:payments')).status, 200);
+});
+
+test('ping identifies the app, and Quit answers first and then runs the shutdown', async (t) => {
+  let quit = 0;
+  const { call } = await startServer(t, { onQuit: () => { quit++; } });
+  assert.deepEqual((await call('app:ping')).body.result, { app: 'portfolio-ledger', packaged: false });
+  assert.equal((await call('app:quit')).body.result, true);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(quit, 1);
+});
+
+test('an extra host name (the Chromebook one) is accepted only when configured', async (t) => {
+  const http = require('node:http');
+  const statusFor = (port, host) => new Promise((resolve) => {
+    http.get({ host: '127.0.0.1', port, path: '/', headers: { Host: `${host}:${port}` } }, (res) => {
+      res.resume();
+      resolve(res.statusCode);
+    });
+  });
+  const plain = await startServer(t);
+  assert.equal(await statusFor(plain.port, 'penguin.linux.test'), 403);
+  const chromebook = await startServer(t, { extraHosts: ['penguin.linux.test'] });
+  assert.equal(await statusFor(chromebook.port, 'penguin.linux.test'), 200);
+  const res = await chromebook.call('policies:list', null, { 'X-Portfolio-Ledger': '1', Origin: `http://penguin.linux.test:${chromebook.port}` });
+  assert.equal(res.status, 200);
 });

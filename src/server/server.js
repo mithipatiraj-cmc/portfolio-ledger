@@ -12,6 +12,11 @@
 //   npm run serve -- --port 6000      another port (default 5757)
 //   npm run serve -- --no-open        don't open the browser
 //   node src/server/server.js --check-reminders   one reminder check, then exit (used by the daily OS job)
+//
+// Packaged as a double-clickable app (scripts/build-web.js), it bundles the
+// page inside the executable, and a double-click *launches* it: starts the
+// server in the background if it isn't running, opens the browser, and exits.
+// The page's Quit button stops the background server.
 
 try {
   require('node:sqlite');
@@ -33,8 +38,38 @@ const { defaultDataDir } = require('./paths.js');
 
 const HOST = '127.0.0.1';
 const DEFAULT_PORT = 5757;
+const FOREGROUND_FLAG = '--foreground';
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 const WEB_API_FILE = path.join(__dirname, 'webApi.js');
+
+// Packaged as a single executable (Node SEA), the page's files are bundled
+// assets named 'renderer/<file>' and 'webApi.js' instead of files on disk.
+const sea = (() => {
+  try {
+    return require('node:sea');
+  } catch {
+    return null;
+  }
+})();
+const IS_PACKAGED = Boolean(sea?.isSea());
+
+/** Inside a Chromebook's Linux environment, Chrome reaches the app at penguin.linux.test, not localhost. */
+const IN_CHROMEBOOK_LINUX = process.platform === 'linux' && fs.existsSync('/opt/google/cros-containers');
+const CHROMEBOOK_HOST = 'penguin.linux.test';
+
+/** The page's files, from disk in development or from the executable when packaged. name → Buffer, or null. */
+function readPageFile(name) {
+  if (IS_PACKAGED) {
+    const key = name === 'webApi.js' ? name : `renderer/${name}`;
+    try {
+      return Buffer.from(sea.getAsset(key));
+    } catch {
+      return null;
+    }
+  }
+  const file = name === 'webApi.js' ? WEB_API_FILE : path.join(RENDERER_DIR, name);
+  return fs.existsSync(file) ? fs.readFileSync(file) : null;
+}
 const API_HEADER = 'x-portfolio-ledger';
 const MAX_JSON_BYTES = 1024 * 1024;
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -69,9 +104,17 @@ class HttpError extends Error {
  * The HTTP front end for an appCore. Exported for tests; main() below runs it.
  * Uploaded files (Excel imports, backups to restore) are kept in uploadDir
  * under random tokens until used, so the page never names a path on disk.
+ * extraHosts are other names the page may be opened under (the Chromebook one);
+ * onQuit runs after the page's Quit request has been answered.
  */
-function createLedgerServer({ core, port, uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'portfolio-ledger-')) }) {
-  const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+function createLedgerServer({
+  core,
+  port,
+  uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'portfolio-ledger-')),
+  extraHosts = [],
+  onQuit = () => {}
+}) {
+  const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...extraHosts.map((h) => `${h}:${port}`)]);
   const allowedOrigins = new Set([...allowedHosts].map((h) => `http://${h}`));
   const uploads = new Map(); // token → { kind, filePath }
 
@@ -110,6 +153,12 @@ function createLedgerServer({ core, port, uploadDir = fs.mkdtempSync(path.join(o
     },
     'uploads:discard': ({ token }) => {
       discardUpload(token);
+      return true;
+    },
+    // For the launcher (is it already running?) and the page's Quit button.
+    'app:ping': () => ({ app: 'portfolio-ledger', packaged: IS_PACKAGED }),
+    'app:quit': () => {
+      setImmediate(onQuit); // after this response has gone out
       return true;
     }
   };
@@ -155,7 +204,7 @@ function createLedgerServer({ core, port, uploadDir = fs.mkdtempSync(path.join(o
 
   /** The page itself, with webApi.js loaded first so window.api exists for the other scripts. */
   function indexHtml() {
-    const html = fs.readFileSync(path.join(RENDERER_DIR, 'index.html'), 'utf8');
+    const html = readPageFile('index.html').toString('utf8');
     const firstScript = html.indexOf('<script src=');
     return `${html.slice(0, firstScript)}<script src="webApi.js"></script>\n  ${html.slice(firstScript)}`;
   }
@@ -165,17 +214,12 @@ function createLedgerServer({ core, port, uploadDir = fs.mkdtempSync(path.join(o
       return send(res, 200, indexHtml(), { 'Content-Type': CONTENT_TYPES['.html'] });
     }
     if (urlPath === '/favicon.ico') return send(res, 204, ''); // browsers ask; the app has no icon yet
-    if (urlPath === '/webApi.js') {
-      return send(res, 200, fs.readFileSync(WEB_API_FILE), { 'Content-Type': CONTENT_TYPES['.js'] });
-    }
-    // Only files directly inside src/renderer, by name: no subfolders, no '..'.
+    // Only the page's own files, by plain name: no subfolders, no '..'.
     const name = decodeURIComponent(urlPath.slice(1));
     const type = CONTENT_TYPES[path.extname(name)];
-    const file = path.join(RENDERER_DIR, name);
-    if (!type || name.includes('/') || name.includes('\\') || path.dirname(file) !== RENDERER_DIR || !fs.existsSync(file)) {
-      throw new HttpError(404, 'Not found');
-    }
-    return send(res, 200, fs.readFileSync(file), { 'Content-Type': type });
+    const data = type && /^[\w.-]+$/.test(name) && !name.startsWith('.') ? readPageFile(name) : null;
+    if (!data) throw new HttpError(404, 'Not found');
+    return send(res, 200, data, { 'Content-Type': type });
   }
 
   async function handle(req, res) {
@@ -249,27 +293,72 @@ function createLedgerServer({ core, port, uploadDir = fs.mkdtempSync(path.join(o
   return server;
 }
 
-/** Ask an already-running server to run a reminder check. Resolves false if none is listening. */
-function delegateCheck(port) {
+/** Make a request of an already-running server. Resolves its result, or null if none is listening. */
+function callRunning(port, channel, { timeout = 60000 } = {}) {
   return new Promise((resolve) => {
     const req = http.request(
       {
         host: HOST,
         port,
         method: 'POST',
-        path: '/api/call/reminders:checkNow',
+        path: `/api/call/${channel}`,
         headers: { Host: `${HOST}:${port}`, [API_HEADER]: '1', 'Content-Type': 'application/json' },
-        timeout: 60000
+        timeout
       },
       (res) => {
-        res.resume();
-        res.on('end', () => resolve(res.statusCode === 200));
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          if (res.statusCode !== 200) return resolve(null);
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')).result ?? true);
+          } catch {
+            resolve(null);
+          }
+        });
       }
     );
-    req.on('error', () => resolve(false));
+    req.on('error', () => resolve(null));
     req.on('timeout', () => req.destroy());
     req.end('{}');
   });
+}
+
+const isOurServer = async (port) => (await callRunning(port, 'app:ping', { timeout: 2000 }))?.app === 'portfolio-ledger';
+
+/**
+ * What a double-click on the packaged app does: open the browser on the
+ * running server, starting one in the background first if needed. The
+ * launcher itself then exits, so no window stays open.
+ */
+async function launch(options, userDataPath) {
+  const url = browserUrl(options.port);
+  if (await isOurServer(options.port)) {
+    if (options.open) openBrowser(url);
+    return;
+  }
+  fs.mkdirSync(userDataPath, { recursive: true });
+  const logPath = path.join(userDataPath, 'server.log');
+  const log = fs.openSync(logPath, 'a');
+  const args = [FOREGROUND_FLAG, '--no-open', '--port', String(options.port)];
+  const child = spawn(process.execPath, IS_PACKAGED ? args : [__filename, ...args], {
+    detached: true,
+    stdio: ['ignore', log, log],
+    windowsHide: true
+  });
+  child.unref();
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    if (await isOurServer(options.port)) {
+      if (options.open) openBrowser(url);
+      return;
+    }
+  }
+  throw new Error(`Portfolio Ledger didn't start. Details are in ${logPath}`);
+}
+
+function browserUrl(port) {
+  return `http://${IN_CHROMEBOOK_LINUX ? CHROMEBOOK_HOST : 'localhost'}:${port}/`;
 }
 
 function openBrowser(url) {
@@ -284,17 +373,22 @@ function parseArgs(argv) {
   const portIndex = argv.indexOf('--port');
   const port = portIndex >= 0 ? Number(argv[portIndex + 1]) : Number(process.env.PORT) || DEFAULT_PORT;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid port: ${argv[portIndex + 1]}`);
-  return { port, open: !argv.includes('--no-open'), checkReminders: argv.includes(CHECK_FLAG) };
+  return {
+    port,
+    open: !argv.includes('--no-open'),
+    checkReminders: argv.includes(CHECK_FLAG),
+    foreground: argv.includes(FOREGROUND_FLAG)
+  };
 }
 
 async function main() {
-  require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env'), quiet: true });
+  if (!IS_PACKAGED) require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env'), quiet: true });
   const options = parseArgs(process.argv.slice(2));
   const userDataPath = defaultDataDir();
 
   // The daily OS job: hand the check to a running server if there is one, else do it here.
   if (options.checkReminders) {
-    if (await delegateCheck(options.port)) {
+    if (await callRunning(options.port, 'reminders:checkNow')) {
       console.log(`${new Date().toISOString()} reminder check handed to the running app on port ${options.port}`);
       return;
     }
@@ -308,10 +402,27 @@ async function main() {
     return;
   }
 
+  // A double-click on the packaged app: start in the background if needed, open the browser, exit.
+  if (IS_PACKAGED && !options.foreground) return launch(options, userDataPath);
+
   const core = createAppCore({ userDataPath, launchCommand: () => launchCommand(options.port), secretStore: createSecretStore({ userDataPath }) });
   core.resetIfRequested();
-  const server = createLedgerServer({ core, port: options.port });
-  const url = `http://localhost:${options.port}/`;
+  let hourly = null;
+  const stop = () => {
+    clearInterval(hourly);
+    server.close();
+    core.close();
+    process.exit(0);
+  };
+  // In a Chromebook's Linux container, Chrome connects from ChromeOS through the
+  // container's own network (not reachable from other devices), so listen there.
+  const server = createLedgerServer({
+    core,
+    port: options.port,
+    extraHosts: IN_CHROMEBOOK_LINUX ? [CHROMEBOOK_HOST] : [],
+    onQuit: stop
+  });
+  const url = browserUrl(options.port);
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -324,35 +435,29 @@ async function main() {
     process.exit(1);
   });
 
-  server.listen(options.port, HOST, () => {
-    console.log(`Portfolio Ledger is running at ${url}`);
+  server.listen(options.port, IN_CHROMEBOOK_LINUX ? '0.0.0.0' : HOST, () => {
+    console.log(`${new Date().toISOString()} Portfolio Ledger is running at ${url}`);
     console.log(`Data: ${core.dbPath}`);
-    console.log('Only this computer can open it. Press Ctrl+C to stop.');
+    console.log('Only this computer can open it. Quit from the app, or press Ctrl+C here.');
     if (options.open) openBrowser(url);
   });
 
   // Catch anything that came due while it wasn't running, then keep checking hourly.
   core.reminders.runCheck('startup');
-  const hourly = setInterval(() => core.reminders.runCheck('hourly'), HOUR_MS);
+  hourly = setInterval(() => core.reminders.runCheck('hourly'), HOUR_MS);
 
-  const stop = () => {
-    clearInterval(hourly);
-    server.close();
-    core.close();
-    process.exit(0);
-  };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
 }
 
-/** How the daily OS job runs a headless check in browser mode: this script with --check-reminders. */
+/** How the daily OS job runs a headless check in browser mode: this program with --check-reminders. */
 function launchCommand(port) {
-  const args = [__filename, CHECK_FLAG];
+  const args = IS_PACKAGED ? [CHECK_FLAG] : [__filename, CHECK_FLAG];
   if (port !== DEFAULT_PORT) args.push('--port', String(port));
   return { command: process.execPath, args };
 }
 
-if (require.main === module) {
+if (IS_PACKAGED || require.main === module) {
   main().catch((err) => {
     console.error(err.message);
     process.exit(1);

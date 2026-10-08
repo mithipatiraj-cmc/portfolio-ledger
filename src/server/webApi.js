@@ -77,6 +77,7 @@
     saveReminderSettings: (input) => call('reminders:save', input),
     sendTestReminder: (input) => call('reminders:test', input),
     checkRemindersNow: () => call('reminders:checkNow'),
+    quitApp: () => call('app:quit'), // browser version only: stops the local server
 
     // Excel import: upload the chosen file; previewSheet/commit refer to it by its token.
     async importPreview() {

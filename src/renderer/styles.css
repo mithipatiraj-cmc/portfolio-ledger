@@ -635,6 +635,10 @@ button.collapse-toggle:focus-visible { outline: 2px solid var(--accent); outline
 .panel.collapsible.collapsed .panel-head { margin-bottom: 0; }
 .panel.collapsible.collapsed .history-filter { display: none; }
 .panel-body[hidden] { display: none; }
+
+/* Shown in place of the app after Quit (browser version). */
+main.stopped { max-width: 520px; margin: 80px auto; text-align: center; color: var(--text-2); }
+main.stopped h2 { color: var(--text); }
 .history-filter { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-2); }
 .advance-row { margin: 14px 0 0; font-weight: 400; }
 tr.archived td { color: var(--muted); }
